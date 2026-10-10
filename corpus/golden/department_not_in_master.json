@@ -1,0 +1,97 @@
+{
+  "name": "department_not_in_master",
+  "note": "a department the master list has never heard of",
+  "layout": "years-across",
+  "ruled": true,
+  "sessions": false,
+  "allowNoCode": false,
+  "allowNoStaff": false,
+  "expectNoSections": false,
+  "unknownDept": "FOOD TECHNOLOGY",
+  "deptCode": null,
+  "secondDeptCode": null,
+  "sections": null,
+  "years": [
+    2,
+    3
+  ],
+  "expectTables": 1,
+  "meta": {
+    "academicYear": "2026-27",
+    "term": "odd",
+    "dateRange": {
+      "from": "2026-10-06",
+      "to": "2026-10-16"
+    }
+  },
+  "exams": [
+    {
+      "key": "FOOD TECHNOLOGY|2026-10-06|2|",
+      "dept": "FOOD TECHNOLOGY",
+      "date": "2026-10-06",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "FT2501",
+          "name": "Food Chemistry"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. A. Kumar"
+      ]
+    },
+    {
+      "key": "FOOD TECHNOLOGY|2026-10-06|3|",
+      "dept": "FOOD TECHNOLOGY",
+      "date": "2026-10-06",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "FT3501",
+          "name": "Food Microbiology"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. R. Iyer"
+      ]
+    },
+    {
+      "key": "FOOD TECHNOLOGY|2026-10-07|2|",
+      "dept": "FOOD TECHNOLOGY",
+      "date": "2026-10-07",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "FT2502",
+          "name": "Food Processing"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. S. Menon"
+      ]
+    },
+    {
+      "key": "FOOD TECHNOLOGY|2026-10-07|3|",
+      "dept": "FOOD TECHNOLOGY",
+      "date": "2026-10-07",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "FT3502",
+          "name": "Food Safety"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. L. Das"
+      ]
+    }
+  ]
+}

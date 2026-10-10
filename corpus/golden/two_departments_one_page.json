@@ -1,0 +1,168 @@
+{
+  "name": "two_departments_one_page",
+  "note": "CSE above ECE, each with its own table, on a single page",
+  "layout": "years-across",
+  "ruled": true,
+  "sessions": false,
+  "allowNoCode": false,
+  "allowNoStaff": false,
+  "expectNoSections": false,
+  "unknownDept": null,
+  "deptCode": "CSE",
+  "secondDeptCode": "ECE",
+  "sections": [
+    "A",
+    "B"
+  ],
+  "years": [
+    2,
+    3
+  ],
+  "expectTables": 2,
+  "meta": {
+    "academicYear": "2026-27",
+    "term": "odd",
+    "dateRange": {
+      "from": "2026-10-06",
+      "to": "2026-10-16"
+    }
+  },
+  "exams": [
+    {
+      "key": "CSE|2026-10-06|2|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS25C01",
+          "name": "Discrete Mathematics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. A. Kumar"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-06|3|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS3501",
+          "name": "Theory of Computation"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. R. Iyer"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|2|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS25C02",
+          "name": "Data Structures"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. S. Menon"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|3|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS3502",
+          "name": "Database Systems"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. L. Das"
+      ]
+    },
+    {
+      "key": "ECE|2026-10-06|3|",
+      "dept": "ECE",
+      "date": "2026-10-06",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "EC3501",
+          "name": "Digital Signal Processing"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. V. Raman"
+      ]
+    },
+    {
+      "key": "ECE|2026-10-06|4|",
+      "dept": "ECE",
+      "date": "2026-10-06",
+      "year": 4,
+      "session": null,
+      "subjects": [
+        {
+          "code": "EC4501",
+          "name": "VLSI Design"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Mr. S. Kumar"
+      ]
+    },
+    {
+      "key": "ECE|2026-10-07|3|",
+      "dept": "ECE",
+      "date": "2026-10-07",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "EC3502",
+          "name": "Analog Communication"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. P. Nair"
+      ]
+    },
+    {
+      "key": "ECE|2026-10-07|4|",
+      "dept": "ECE",
+      "date": "2026-10-07",
+      "year": 4,
+      "session": null,
+      "subjects": [
+        {
+          "code": "EC4502",
+          "name": "Embedded Systems"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. A. Das"
+      ]
+    }
+  ]
+}

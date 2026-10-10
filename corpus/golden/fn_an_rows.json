@@ -1,0 +1,165 @@
+{
+  "name": "fn_an_rows",
+  "note": "FN and AN printed as separate rows that share one date column",
+  "layout": "years-across",
+  "ruled": true,
+  "sessions": true,
+  "allowNoCode": false,
+  "allowNoStaff": false,
+  "expectNoSections": false,
+  "unknownDept": null,
+  "deptCode": "CSE",
+  "secondDeptCode": null,
+  "sections": null,
+  "years": [
+    2,
+    3
+  ],
+  "expectTables": 1,
+  "meta": {
+    "academicYear": "2026-27",
+    "term": "odd",
+    "dateRange": {
+      "from": "2026-10-06",
+      "to": "2026-10-16"
+    }
+  },
+  "exams": [
+    {
+      "key": "CSE|2026-10-06|2|FN",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 2,
+      "session": "FN",
+      "subjects": [
+        {
+          "code": "CS25C01",
+          "name": "Discrete Mathematics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. A. Kumar"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-06|3|FN",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 3,
+      "session": "FN",
+      "subjects": [
+        {
+          "code": "CS3501",
+          "name": "Theory of Computation"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. R. Iyer"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-06|2|AN",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 2,
+      "session": "AN",
+      "subjects": [
+        {
+          "code": "CS25C07",
+          "name": "Probability and Statistics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. S. Menon"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-06|3|AN",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 3,
+      "session": "AN",
+      "subjects": [
+        {
+          "code": "CS3507",
+          "name": "Computer Graphics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. L. Das"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|2|FN",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 2,
+      "session": "FN",
+      "subjects": [
+        {
+          "code": "CS25C02",
+          "name": "Data Structures"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. K. Rao"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|3|FN",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 3,
+      "session": "FN",
+      "subjects": [
+        {
+          "code": "CS3502",
+          "name": "Database Systems"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. M. Fernandes"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|2|AN",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 2,
+      "session": "AN",
+      "subjects": [
+        {
+          "code": "CS25C08",
+          "name": "Probability and Combinatorics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Mr. T. Varghese"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|3|AN",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 3,
+      "session": "AN",
+      "subjects": [
+        {
+          "code": "CS3508",
+          "name": "Numerical Methods"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Mr. Y. Joseph"
+      ]
+    }
+  ]
+}

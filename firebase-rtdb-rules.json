@@ -1,0 +1,60 @@
+{
+  "rules": {
+    "colleges": {
+      ".read": "auth != null",
+      "$collegeId": {
+        ".write": "auth != null && (auth.uid === '1MLSxLJ30JR6GSIuB3dRL6OahP33' || (newData.exists() && newData.child('adminUid').val() === auth.uid) || (data.exists() && data.child('adminUid').val() === auth.uid))",
+        ".validate": "newData.hasChildren(['id','name','centre_code']) && newData.child('id').isString() && newData.child('name').isString() && newData.child('centre_code').isString() && newData.child('name').val().length > 0 && newData.child('centre_code').val().length > 0"
+      }
+    },
+
+    "students": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$studentId": {
+        ".validate": "newData.hasChildren(['id','regno','name','dept','college_id']) && newData.child('id').isString() && newData.child('regno').isString() && newData.child('name').isString() && newData.child('dept').isString() && newData.child('college_id').isString() && newData.child('regno').val().length > 0 && newData.child('name').val().length > 0"
+      }
+    },
+
+    "halls": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$hallId": {
+        ".validate": "newData.hasChildren(['id','name','college_id']) && newData.child('id').isString() && newData.child('name').isString() && newData.child('college_id').isString() && newData.child('name').val().length > 0"
+      }
+    },
+
+    "exams": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$examId": {
+        ".validate": "newData.hasChildren(['id','subject','college_id']) && newData.child('id').isString() && newData.child('subject').isString() && newData.child('college_id').isString() && newData.child('subject').val().length > 0"
+      }
+    },
+
+    "seating_plans": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$planId": {
+        ".validate": "newData.hasChildren(['id','exam_id','plan']) && newData.child('id').isString() && newData.child('exam_id').isString()"
+      }
+    },
+
+    "registration_queue": {
+      "$collegeId": {
+        ".read": "auth != null && (auth.uid === '1MLSxLJ30JR6GSIuB3dRL6OahP33' || root.child('colleges').child($collegeId).child('adminUid').val() === auth.uid)",
+
+        "$queueId": {
+          ".write": "auth != null && (auth.uid === '1MLSxLJ30JR6GSIuB3dRL6OahP33' || root.child('colleges').child($collegeId).child('adminUid').val() === auth.uid || (!data.exists() && newData.exists() && newData.child('student_id').val() === $queueId && newData.child('college_id').val() === $collegeId))",
+
+          ".validate": "newData.hasChildren(['status']) && newData.hasChildren(['student_id','regno','name','dept','college_id','status']) && newData.child('student_id').isString() && newData.child('regno').isString() && newData.child('name').isString() && newData.child('dept').isString() && newData.child('college_id').isString() && newData.child('college_id').val() === $collegeId && ((newData.child('status').val() === 'pending') || ((newData.child('status').val() === 'confirmed' || newData.child('status').val() === 'rejected') && (auth.uid === '1MLSxLJ30JR6GSIuB3dRL6OahP33' || root.child('colleges').child($collegeId).child('adminUid').val() === auth.uid)))"
+        }
+      }
+    },
+
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

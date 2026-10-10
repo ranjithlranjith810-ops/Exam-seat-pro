@@ -1,4 +1,20 @@
+# ExamOps (ExamSeat Pro) - Netlify configuration
+#
+# The app is a single-page app: every valid client-side route (/dashboard,
+# /seating, /seating/global-notice/fn, ...) is served by index.html. Without
+# this rewrite, refreshing or deep-linking one of those URLs returns a 404 from
+# the server. status = 200 serves index.html directly (no client redirect), so
+# the browser address bar keeps the real path and Back/Forward keep working.
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
+# index.html carries the whole application, so it must never be served from a
+# stale CDN cache after a deploy - otherwise users keep running the previous
+# build. Fingerprint-free, so revalidation on every load is the safe choice.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

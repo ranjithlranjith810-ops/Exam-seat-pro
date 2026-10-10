@@ -1,0 +1,235 @@
+{
+  "name": "ruled_4yr",
+  "note": "four year columns, the widest table most colleges print",
+  "layout": "years-across",
+  "ruled": true,
+  "sessions": false,
+  "allowNoCode": false,
+  "allowNoStaff": false,
+  "expectNoSections": false,
+  "unknownDept": null,
+  "deptCode": "MECH",
+  "secondDeptCode": null,
+  "sections": null,
+  "years": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "expectTables": 1,
+  "meta": {
+    "academicYear": "2026-27",
+    "term": "odd",
+    "dateRange": {
+      "from": "2026-10-06",
+      "to": "2026-10-16"
+    }
+  },
+  "exams": [
+    {
+      "key": "MECH|2026-10-06|1|",
+      "dept": "MECH",
+      "date": "2026-10-06",
+      "year": 1,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME1501",
+          "name": "Engineering Mathematics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. R. Iyer"
+      ]
+    },
+    {
+      "key": "MECH|2026-10-06|2|",
+      "dept": "MECH",
+      "date": "2026-10-06",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME2501",
+          "name": "Thermodynamics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. K. Menon"
+      ]
+    },
+    {
+      "key": "MECH|2026-10-06|3|",
+      "dept": "MECH",
+      "date": "2026-10-06",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME3501",
+          "name": "Machine Design"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. M. Rao"
+      ]
+    },
+    {
+      "key": "MECH|2026-10-06|4|",
+      "dept": "MECH",
+      "date": "2026-10-06",
+      "year": 4,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME4501",
+          "name": "Automobile Engineering"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. S. Nair"
+      ]
+    },
+    {
+      "key": "MECH|2026-10-07|1|",
+      "dept": "MECH",
+      "date": "2026-10-07",
+      "year": 1,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME1502",
+          "name": "Engineering Physics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. P. Das"
+      ]
+    },
+    {
+      "key": "MECH|2026-10-07|2|",
+      "dept": "MECH",
+      "date": "2026-10-07",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME2502",
+          "name": "Fluid Mechanics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. T. Pillai"
+      ]
+    },
+    {
+      "key": "MECH|2026-10-07|3|",
+      "dept": "MECH",
+      "date": "2026-10-07",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME3502",
+          "name": "Heat Transfer"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. Y. Singh"
+      ]
+    },
+    {
+      "key": "MECH|2026-10-07|4|",
+      "dept": "MECH",
+      "date": "2026-10-07",
+      "year": 4,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME4502",
+          "name": "Industrial Automation"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. B. Kumar"
+      ]
+    },
+    {
+      "key": "MECH|2026-10-08|1|",
+      "dept": "MECH",
+      "date": "2026-10-08",
+      "year": 1,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME1503",
+          "name": "Engineering Chemistry"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. L. Nair"
+      ]
+    },
+    {
+      "key": "MECH|2026-10-08|2|",
+      "dept": "MECH",
+      "date": "2026-10-08",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME2503",
+          "name": "Engineering Graphics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. N. Das"
+      ]
+    },
+    {
+      "key": "MECH|2026-10-08|3|",
+      "dept": "MECH",
+      "date": "2026-10-08",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME3503",
+          "name": "Manufacturing Processes"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. V. Iyer"
+      ]
+    },
+    {
+      "key": "MECH|2026-10-08|4|",
+      "dept": "MECH",
+      "date": "2026-10-08",
+      "year": 4,
+      "session": null,
+      "subjects": [
+        {
+          "code": "ME4503",
+          "name": "CAD and CAM"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. A. Menon"
+      ]
+    }
+  ]
+}

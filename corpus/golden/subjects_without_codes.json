@@ -1,0 +1,131 @@
+{
+  "name": "subjects_without_codes",
+  "note": "subjects printed with a name only, no course code at all",
+  "layout": "years-across",
+  "ruled": true,
+  "sessions": false,
+  "allowNoCode": true,
+  "allowNoStaff": false,
+  "expectNoSections": false,
+  "unknownDept": null,
+  "deptCode": "CSE",
+  "secondDeptCode": null,
+  "sections": null,
+  "years": [
+    2,
+    3
+  ],
+  "expectTables": 1,
+  "meta": {
+    "academicYear": "2026-27",
+    "term": "odd",
+    "dateRange": {
+      "from": "2026-10-06",
+      "to": "2026-10-16"
+    }
+  },
+  "exams": [
+    {
+      "key": "CSE|2026-10-06|2|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": null,
+          "name": "Discrete Mathematics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. A. Kumar"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-06|3|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": null,
+          "name": "Theory of Computation"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. R. Iyer"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|2|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": null,
+          "name": "Data Structures"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. S. Menon"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|3|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": null,
+          "name": "Database Systems"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. L. Das"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-08|2|",
+      "dept": "CSE",
+      "date": "2026-10-08",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": null,
+          "name": "Analog Circuits"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. K. Rao"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-08|3|",
+      "dept": "CSE",
+      "date": "2026-10-08",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": null,
+          "name": "Software Engineering"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. M. Fernandes"
+      ]
+    }
+  ]
+}

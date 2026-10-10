@@ -1,0 +1,119 @@
+{
+  "name": "no_staff_no_sections",
+  "note": "no staff line and no section letters anywhere in the file",
+  "layout": "years-across",
+  "ruled": true,
+  "sessions": false,
+  "allowNoCode": false,
+  "allowNoStaff": true,
+  "expectNoSections": true,
+  "unknownDept": null,
+  "deptCode": "CSE",
+  "secondDeptCode": null,
+  "sections": null,
+  "years": [
+    2,
+    3
+  ],
+  "expectTables": 1,
+  "meta": {
+    "academicYear": "2026-27",
+    "term": "even",
+    "dateRange": {
+      "from": "2026-10-06",
+      "to": "2026-10-16"
+    }
+  },
+  "exams": [
+    {
+      "key": "CSE|2026-10-06|2|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS2601",
+          "name": "Discrete Mathematics"
+        }
+      ],
+      "nonExam": [],
+      "staff": []
+    },
+    {
+      "key": "CSE|2026-10-06|3|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS3601",
+          "name": "Theory of Computation"
+        }
+      ],
+      "nonExam": [],
+      "staff": []
+    },
+    {
+      "key": "CSE|2026-10-07|2|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS2602",
+          "name": "Data Structures"
+        }
+      ],
+      "nonExam": [],
+      "staff": []
+    },
+    {
+      "key": "CSE|2026-10-07|3|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS3602",
+          "name": "Database Systems"
+        }
+      ],
+      "nonExam": [],
+      "staff": []
+    },
+    {
+      "key": "CSE|2026-10-08|2|",
+      "dept": "CSE",
+      "date": "2026-10-08",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS2603",
+          "name": "Analog Circuits"
+        }
+      ],
+      "nonExam": [],
+      "staff": []
+    },
+    {
+      "key": "CSE|2026-10-08|3|",
+      "dept": "CSE",
+      "date": "2026-10-08",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS3603",
+          "name": "Software Engineering"
+        }
+      ],
+      "nonExam": [],
+      "staff": []
+    }
+  ]
+}
