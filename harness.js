@@ -96,6 +96,11 @@ const NOTICE_ENGINE = new Set([
 const LOAD_ENGINE = new Set([
   "withDataTimeout",
   "loadCollegeDataSet",
+  "loadCollegeCoreDataSet",
+  "loadSeatingPlanDataSet",
+  "plansByExamId",
+  "scopePlansByExams",
+  "carryForwardPlansFor",
 ]);
 
 // The bulk-seating path. These are the pure helpers the Bulk Seating by Date
@@ -121,6 +126,14 @@ const BULK_ENGINE = new Set([
   "bulkYield",
   "bulkSummarize",
   "runBulkSeating",
+]);
+
+// The exam-deletion path. These build the multi-location delete update from a
+// single whole-node plans read, so the "one atomic request, however many exams"
+// guarantee and the ownership scoping can be asserted as plain functions.
+const DELETE_ENGINE = new Set([
+  "planDeleteUpdatePaths",
+  "buildBulkDeleteUpdate",
 ]);
 
 function load() {
@@ -152,8 +165,9 @@ function load() {
   const engine = all.filter((n) => SEATING_ENGINE.has(n) && !isJsx(n));
   const loadEngine = all.filter((n) => LOAD_ENGINE.has(n) && !isJsx(n));
   const bulkEngine = all.filter((n) => BULK_ENGINE.has(n) && !isJsx(n));
+  const deleteEngine = all.filter((n) => DELETE_ENGINE.has(n) && !isJsx(n));
   const noticeEngine = all.filter((n) => NOTICE_ENGINE.has(n) && !isJsx(n));
-  const names = [...new Set([...shared, ...catFns, ...engine, ...loadEngine, ...bulkEngine, ...noticeEngine])];
+  const names = [...new Set([...shared, ...catFns, ...engine, ...loadEngine, ...bulkEngine, ...deleteEngine, ...noticeEngine])];
   const needed = names.filter((n) => !fns[n]);
   if (needed.length) throw new Error("could not extract: " + needed.join(", "));
 

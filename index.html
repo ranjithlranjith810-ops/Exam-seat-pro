@@ -3269,70 +3269,152 @@ function withDataTimeout(promise, ms, label) {
 //
 // options: coreTimeoutMs, planTimeoutMs, planBudgetMs, minPlanReadMs,
 //          previousPlans.
-async function loadCollegeDataSet(readers, options) {
+// Resolve the whole college dataset, or throw. Core-collection failures
+// propagate exactly as before (a failed read is NEVER swallowed into []), and the
+// seating-plan pass keeps every safety rule: a plan read that fails or times out
+// carries the previous value forward (never looks deleted) while a SUCCESSFUL
+// read that returns nothing is truthful (no stale resurrection).
+//
+// The change that makes login fast: the OLD pass issued one full /seating_plans
+// read PER generated exam (N serial round-trips, each downloading the whole
+// node). The new pass reads seating plans ONCE, and that one request runs
+// CONCURRENTLY with the three core reads, so the dashboard wait is ~4 parallel
+// bounded requests instead of ~3 + N serial downloads.
+//
+// readers: { getStudents, getHalls, getExams, getAllSeatingPlans }
+// options: coreTimeoutMs, planTimeoutMs, planBudgetMs, minPlanReadMs,
+//          previousPlans, skipCore, exams.
+//   skipCore + exams -> plan-only pass (used by the background plan refresh).
+async function loadCollegeCoreDataSet(readers, options) {
   const o = options || {};
-  const coreMs   = o.coreTimeoutMs || DATA_LOAD_TIMEOUT_MS;
-  const planMs   = o.planTimeoutMs || SEATING_PLAN_TIMEOUT_MS;
-  const budgetMs = o.planBudgetMs  || SEATING_PLAN_BUDGET_MS;
-  const minRead  = o.minPlanReadMs || MIN_SEATING_PLAN_READ_MS;
-  const prev     = o.previousPlans || {};
+  const coreMs = o.coreTimeoutMs || DATA_LOAD_TIMEOUT_MS;
   const [students, halls, exams] = await withDataTimeout(
     Promise.all([readers.getStudents(), readers.getHalls(), readers.getExams()]),
     coreMs, "Loading college data");
-  const examList = Array.isArray(exams) ? exams : [];
-  const plans = {};
-  const unreadPlanIds = [];
-  const planLoadErrors = [];
-  let plansIncomplete = false;
-  if (readers.getSeatingPlan) {
-    const deadline = Date.now() + budgetMs;
-    for (const exam of examList) {
-      if (!exam || !exam.seatinggenerated) continue;
-      const left = deadline - Date.now();
-      if (left < minRead) {
-        // Not enough budget left for a fair attempt. Skipping is non-fatal,
-        // but a plan we already hold must carry forward, not look deleted.
-        if (prev[exam.id]) plans[exam.id] = prev[exam.id];
-        plansIncomplete = true;
-        unreadPlanIds.push(exam.id);
-        for (let ri = examList.indexOf(exam) + 1; ri < examList.length; ri++) {
-          const pending = examList[ri];
-          if (pending && pending.seatinggenerated) {
-            unreadPlanIds.push(pending.id);
-            if (prev[pending.id]) plans[pending.id] = prev[pending.id];
-          }
-        }
-        console.warn("[loadCollegeDataSet] seating-plan budget exhausted after " +
-          Math.round(budgetMs / 1000) + "s; skipped " + unreadPlanIds.length + " remaining plan reads.");
-        break;
-      }
-      // The individual read gets a realistic bound, never the bare remainder.
-      const perRead = Math.min(planMs, left);
-      try {
-        const plan = await withDataTimeout(readers.getSeatingPlan(exam.id), perRead, "Loading a seating plan");
-        if (plan) plans[exam.id] = plan;
-        // A successful read that returns nothing means the plan really is gone,
-        // so a stale previous value is deliberately NOT carried forward.
-      } catch (planErr) {
-        // A failed/timed-out read keeps the last good plan, so the UI never
-        // shows a saved plan as missing.
-        if (prev[exam.id]) plans[exam.id] = prev[exam.id];
-        plansIncomplete = true;
-        unreadPlanIds.push(exam.id);
-        planLoadErrors.push({examId:exam.id,message:(planErr&&planErr.message)||"Unknown read error"});
-        console.warn("[loadCollegeDataSet] seating plan not reloaded for exam " +
-          exam.id + ": " + (planErr && planErr.message));
-      }
-    }
-  }
   return {
     students: Array.isArray(students) ? students : [],
     halls: Array.isArray(halls) ? halls : [],
-    exams: examList,
+    exams: Array.isArray(exams) ? exams : [],
+  };
+}
+
+// Pull the plans for the caller's own exams out of a whole-node plan read. The
+// single read therefore never leaks another college's plans into this college's
+// dashboard state. First plan seen per exam wins (same rule as the old rows[0]).
+function plansByExamId(examList, planDocs) {
+  const out = {};
+  const ids = new Set();
+  (examList || []).forEach(function (e) { if (e && e.id) ids.add(e.id); });
+  (planDocs || []).forEach(function (p) {
+    if (!p || !p.exam_id || !ids.has(p.exam_id)) return;
+    if (Object.prototype.hasOwnProperty.call(out, p.exam_id)) return;
+    out[p.exam_id] = p.plan;
+  });
+  return out;
+}
+
+// Restrict an { examId -> plan } map to a specific exam list.
+function scopePlansByExams(planMap, examList) {
+  const out = {};
+  const ids = new Set();
+  (examList || []).forEach(function (e) { if (e && e.id) ids.add(e.id); });
+  Object.keys(planMap || {}).forEach(function (eid) {
+    if (ids.has(eid)) out[eid] = planMap[eid];
+  });
+  return out;
+}
+
+// A plan pass that FAILED or was SKIPPED must never make a saved plan look
+// deleted: every exam that claimed a plan but now has none is reported and its
+// previous value carried forward. Returns { plans, unreadPlanIds }.
+function carryForwardPlansFor(generatedExams, basePlans, previousPlans) {
+  const out = Object.assign({}, basePlans);
+  const unread = [];
+  (generatedExams || []).forEach(function (e) {
+    if (!e || !e.id) return;
+    if (Object.prototype.hasOwnProperty.call(out, e.id)) return;
+    unread.push(e.id);
+    if (previousPlans && previousPlans[e.id]) out[e.id] = previousPlans[e.id];
+  });
+  return { plans: out, unreadPlanIds: unread };
+}
+
+// Seating-plan pass: ONE read guarded by the shared budget. When the budget is
+// below the floor the pass is skipped entirely (`readSkipped`) — a real read is
+// never starved for time. The raw map is unscoped; the caller scopes it to its
+// own exams and applies carry-forward for failed/skipped passes.
+async function loadSeatingPlanDataSet(readers, options) {
+  const o = options || {};
+  const planMs   = o.planTimeoutMs || SEATING_PLAN_TIMEOUT_MS;
+  const budgetMs = o.planBudgetMs  || SEATING_PLAN_BUDGET_MS;
+  const minRead  = o.minPlanReadMs || MIN_SEATING_PLAN_READ_MS;
+  let plans = {};
+  let plansIncomplete = false;
+  let readSkipped = false;
+  const planLoadErrors = [];
+  if (!readers.getAllSeatingPlans) {
+    return { plans: plans, plansIncomplete: plansIncomplete, readSkipped: true, planLoadErrors: planLoadErrors };
+  }
+  if (budgetMs < minRead) {
+    readSkipped = true;
+    plansIncomplete = true;
+  }
+  if (!readSkipped) {
+    const perRead = Math.max(minRead, Math.min(planMs, budgetMs));
+    try {
+      const docs = await withDataTimeout(
+        Promise.resolve(readers.getAllSeatingPlans()),
+        perRead, "Loading seating plans");
+      (Array.isArray(docs) ? docs : []).forEach(function (p) {
+        if (!p || !p.exam_id) return;
+        if (Object.prototype.hasOwnProperty.call(plans, p.exam_id)) return;
+        plans[p.exam_id] = p.plan;
+      });
+    } catch (planErr) {
+      // A failed/timed-out read keeps the last good plan (handled by the caller's
+      // carry-forward) and is reported, so one bad plan read never blocks core data.
+      plansIncomplete = true;
+      planLoadErrors.push({ message: (planErr && planErr.message) || "Unknown read error" });
+      console.warn("[loadSeatingPlanDataSet] seating-plans read failed: " + (planErr && planErr.message));
+    }
+  }
+  return { plans: plans, plansIncomplete: plansIncomplete, readSkipped: readSkipped, planLoadErrors: planLoadErrors };
+}
+
+async function loadCollegeDataSet(readers, options) {
+  const o = options || {};
+  const prev = o.previousPlans || {};
+  const examsProvided = Array.isArray(o.exams) ? o.exams : null;
+  // The seating-plan read starts HERE, in the same tick as the core read, so the
+  // dashboard never again waits for a per-exam plan loop after the core data.
+  const plansP = loadSeatingPlanDataSet(readers, o);
+  const core = o.skipCore
+    ? { students: [], halls: [], exams: examsProvided || [] }
+    : await loadCollegeCoreDataSet(readers, o);
+  const exams = Array.isArray(core.exams) ? core.exams : [];
+  const plansRes = await plansP;
+  // Scope the plan map to THIS college's exams, first plan per exam wins.
+  const scoped = scopePlansByExams(plansRes.plans, exams);
+  // A failed or skipped plans pass must carry the previous values forward so a
+  // saved plan never looks deleted. A SUCCESSFUL pass that returns nothing is
+  // truthful and deliberately does NOT resurrect stale plans.
+  let plans = scoped;
+  let unreadPlanIds = [];
+  if (plansRes.plansIncomplete || plansRes.readSkipped) {
+    const carried = carryForwardPlansFor(
+      exams.filter(function (e) { return e && e.seatinggenerated; }),
+      scoped, prev);
+    plans = carried.plans;
+    unreadPlanIds = carried.unreadPlanIds;
+  }
+  return {
+    students: core.students,
+    halls: core.halls,
+    exams: exams,
     plans: plans,
-    plansIncomplete: plansIncomplete,
+    plansIncomplete: plansRes.plansIncomplete || unreadPlanIds.length > 0,
     unreadPlanIds: unreadPlanIds,
-    planLoadErrors: planLoadErrors,
+    planLoadErrors: plansRes.planLoadErrors,
   };
 }
 
@@ -3495,6 +3577,35 @@ async function dbBatchDelete(collection, ids) {
     await DB.ref("/").update(updates);
   }
   return true;
+}
+
+// ── exam deletion paths (pure) ───────────────────────────────────────────────
+// The delete paths for a set of exams are built ONCE from a single whole-node
+// seating-plans read, never from a per-exam read loop. Each plan doc carries its
+// exam_id, but NO college_id, so there is no server-side filter to apply — the
+// caller scopes with the exams it has already verified it owns.
+function planDeleteUpdatePaths(examIds, planDocs) {
+  const ids = new Set();
+  (examIds || []).forEach(function (id) { ids.add(id); });
+  const updates = {};
+  (planDocs || []).forEach(function (p) {
+    if (p && p.id && p.exam_id && ids.has(p.exam_id)) updates["seating_plans/" + p.id] = null;
+  });
+  return updates;
+}
+
+// One multi-location update that removes the owned exams AND their seating-plan
+// docs in a single atomic write. Only exams already proven owned are included,
+// so a foreign exam (or its plans) can never be deleted here.
+function buildBulkDeleteUpdate(examIds, examDocs, planDocs) {
+  const owned = new Set();
+  (examDocs || []).forEach(function (e) { if (e && e.id) owned.add(e.id); });
+  const safe = (examIds || []).filter(function (id) { return owned.has(id); });
+  const planUpdates = planDeleteUpdatePaths(safe, planDocs);
+  const updates = {};
+  safe.forEach(function (id) { updates["exams/" + id] = null; });
+  Object.keys(planUpdates).forEach(function (k) { updates[k] = null; });
+  return { updates: updates, exams: safe.length, plans: Object.keys(planUpdates).length };
 }
 
 // Bulk update year field — multi-location update for all student IDs at once.
@@ -3705,18 +3816,43 @@ const Store = {
   getExams:        ()        => dbGet("exams", [["college_id","==",Store.getCollegeId()]]),
   addExam:         (e)       => dbAdd("exams", {...e, college_id: Store.getCollegeId()}),
   updateExam:      (id,data) => dbUpdate("exams", id, data),
-  deleteExam:      (id)      => dbDelete("exams", id),
-
-  // Bulk delete — removes the exams AND their seating-plan docs atomically.
-  async bulkDeleteExams(ids) {
-    if (!ids || !ids.length) return true;
-    const updates = {};
-    ids.forEach(id => { updates[`exams/${id}`] = null; });
-    for (const id of ids) {
-      const plans = await dbGet("seating_plans", [["exam_id","==",id]]);
-      (plans || []).forEach(p => { updates[`seating_plans/${p.id}`] = null; });
+  // Delete an exam AND its seating plans in one atomic write. Ownership is
+  // verified with a single tiny college_id read first. The plans are filtered
+  // from ONE whole-node read (plan docs carry no college_id, so any per-exam
+  // plan query would be that same full read).
+  async deleteExam(id) {
+    if (!id) return { deleted: false, plansDeleted: 0 };
+    if (!DB) throw new Error("Firebase Realtime DB not initialised. Check your config.");
+    const colId = Store.getCollegeId ? Store.getCollegeId() : null;
+    if (colId && colId !== "default" && AUTH.currentUser?.uid !== DEV_UID) {
+      const snap = await DB.ref("exams/" + id + "/college_id").get();
+      if (snap.exists() && snap.val() !== colId) {
+        console.error(`[Security] deleteExam blocked: exam ${id} belongs to another college.`);
+        throw new Error("Permission denied: record belongs to another college.");
+      }
     }
-    return dbAtomicUpdate(updates);
+    const planDocs = await Store.getAllSeatingPlans();
+    const built = buildBulkDeleteUpdate([id], [{ id: id }], planDocs);
+    await dbAtomicUpdate(built.updates);
+    return { deleted: built.exams === 1, plansDeleted: built.plans };
+  },
+
+  // Bulk delete — ONE ownership-scoped exams read + ONE whole-node plans read +
+  // ONE atomic multi-location write, however many exams are selected. The old
+  // loop issued a full /seating_plans read per exam before writing anything.
+  async bulkDeleteExams(ids) {
+    if (!ids || !ids.length) return { deleted: 0, plansDeleted: 0 };
+    const colId = Store.getCollegeId ? Store.getCollegeId() : null;
+    if (!colId || colId === "default") throw new Error("College not resolved. Cannot bulk delete.");
+    const examDocs = await dbGet("exams", [["college_id","==",colId]]);
+    const planDocs = await Store.getAllSeatingPlans();
+    const built = buildBulkDeleteUpdate(ids, examDocs, planDocs);
+    if (built.exams < ids.length) {
+      const foreign = ids.filter(function (id) { return !(examDocs || []).some(function (e) { return e.id === id; }); });
+      throw new Error("Permission denied: " + foreign.length + " exam(s) belong to another college.");
+    }
+    await dbAtomicUpdate(built.updates);
+    return { deleted: built.exams, plansDeleted: built.plans };
   },
 
   getColleges:     ()          => dbGet("colleges"),
@@ -3742,6 +3878,10 @@ const Store = {
     }
     return dbAdd("seating_plans", { id: uid(), exam_id: examId, plan });
   },
+  // One read of the whole /seating_plans node. The plans carry NO college_id, so
+  // there is no server-side filter to apply; the caller scopes the results to its
+  // own exams. This replaces the per-exam loop that made login N serial reads.
+  getAllSeatingPlans: () => dbGet("seating_plans", []),
 };
 
 // ── PENDING → ACTIVE PROMOTION ──────────────────────────────────────────────
@@ -17306,6 +17446,7 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
   const [showCatImp,setShowCatImp]=useState(false);
   const [showCatJsonImp,setShowCatJsonImp]=useState(false);
   const [showBulk,setShowBulk]=useState(false);
+  const [deleting,setDeleting]=useState(false);
   const [branchMaster,setBranchMaster]=useState([]);
 
   useEffect(function(){ Store.getBranches().then(setBranchMaster).catch(function(){}); },[]);
@@ -17363,26 +17504,37 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
   }
 
   async function removeExam(e) {
-    if (!window.confirm(`Remove "${e.subject}"?`)) return;
-    try { await Store.deleteExam(e.id); setExams(prev=>prev.filter(x=>x.id!==e.id)); showToast("Removed","info"); }
+    if (deleting) return;
+    if (!window.confirm(`Remove "${e.subject}"? This also deletes its seating plan.`)) return;
+    setDeleting(true);
+    try {
+      const r = await Store.deleteExam(e.id);
+      setExams(prev=>prev.filter(x=>x.id!==e.id));
+      const sp={...seatingPlans}; delete sp[e.id]; setSeatingPlans(sp);
+      showToast(`Removed${r.plansDeleted?` + ${r.plansDeleted} seating plan${r.plansDeleted>1?"s":""}`:""}`,"info");
+    }
     catch(err) { showToast("Error: "+err.message,"error"); }
+    finally { setDeleting(false); }
   }
 
   const visibleExams = exams.filter(examFilter==="upcoming"?e=>!isExamEnded(e):isExamEnded);
   const toggleExamSel = id => setSelExams(prev=>{ const n=new Set(prev); if(n.has(id)) n.delete(id); else n.add(id); return n; });
   const allExamsVisibleSelected = visibleExams.length>0 && visibleExams.every(e=>selExams.has(e.id));
   async function bulkRemoveExams(){
+    if (deleting) return;
     const ids=[...selExams];
     if(!ids.length) return;
     if(!window.confirm(`Delete ${ids.length} exam${ids.length>1?"s":""} and their seating plans?\n\n${exams.filter(e=>ids.includes(e.id)).map(e=>e.subject+" · "+e.date+" "+e.session).join(", ")}`)) return;
+    setDeleting(true);
     try{
-      await Store.bulkDeleteExams(ids);
+      const r = await Store.bulkDeleteExams(ids);
       setExams(prev=>prev.filter(x=>!ids.includes(x.id)));
       const sp={...seatingPlans}; ids.forEach(id=>{ delete sp[id]; });
       setSeatingPlans(sp);
       setSelExams(new Set());
-      showToast(`Deleted ${ids.length} exam${ids.length>1?"s":""}`,"info");
+      showToast(`Deleted ${r.deleted} exam${r.deleted>1?"s":""}${r.plansDeleted?` + ${r.plansDeleted} seating plan${r.plansDeleted>1?"s":""}`:""}`,"info");
     }catch(err){ showToast("Error: "+err.message,"error"); }
+    finally { setDeleting(false); }
   }
 
   const sessionColor = s => s==="FN"?"bg-amber-100 text-amber-700":"bg-indigo-100 text-indigo-700";
@@ -17416,8 +17568,8 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
             className="w-4 h-4 accent-red-600 cursor-pointer"/>
           <span className="text-xs text-red-400">Select all ({visibleExams.length} visible)</span>
           <span className="text-sm font-bold text-red-700">{selExams.size} selected</span>
-          <button onClick={bulkRemoveExams} disabled={!selExams.size}
-            className="ml-auto px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 disabled:opacity-40"><Ic.Trash/>Delete Selected ({selExams.size})</button>
+          <button onClick={bulkRemoveExams} disabled={!selExams.size||deleting}
+            className="ml-auto px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 disabled:opacity-40">{deleting?<><Ic.Spin/>Deleting...</>:<><Ic.Trash/>Delete Selected ({selExams.size})</>}</button>
           <button onClick={()=>setSelExams(new Set())} className="px-3 py-1.5 rounded-lg text-xs font-bold text-red-500 border border-red-200 hover:bg-red-100">Clear</button>
         </div>
       )}
@@ -17457,7 +17609,7 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
                 <Btn onClick={async()=>{setGenerating(exam.id);await onGenerate(exam);setGenerating(null);}} disabled={generating===exam.id} size="sm">
                   {generating===exam.id?<><Ic.Spin/>Generating...</>:<><Ic.Zap/>{exam.seatinggenerated?"Re-Generate":"Generate Seating"}</>}
                 </Btn>
-                <Btn variant="danger" size="sm" onClick={()=>removeExam(exam)}>Remove</Btn>
+                <Btn variant="danger" size="sm" onClick={()=>removeExam(exam)} disabled={deleting}>Remove</Btn>
               </div>
             </div>
           </div>;
@@ -24749,7 +24901,9 @@ const queueWatchKey = (!booting && user && user.role === "admin" && dbOk
       setDataError(e.message);
       setDbOk(false);
     }, 12000);
-    dbGet("colleges",[])
+    // Light reachability read (1 child only) — a full /colleges read is only
+    // needed later, when the college is actually resolved from the email/regno.
+    (DB ? DB.ref("colleges").limitToFirst(1).get() : Promise.reject(new Error("Firebase Realtime DB not initialised.")))
       .then(()=>{ clearTimeout(timeout); setDbOk(true); if(window.__hideSplash) window.__hideSplash(); })
       .catch(e=>{ clearTimeout(timeout); logAppError("api", e, "db reachability check"); setDataError(e.message); if(window.__hideSplash) window.__hideSplash(); });
     return ()=>clearTimeout(timeout);
@@ -24762,8 +24916,10 @@ const queueWatchKey = (!booting && user && user.role === "admin" && dbOk
   // a promise that never reached it). Now the outcome is always one of:
   //   real data   -> dashboard
   //   failure / timeout -> dataError, shown by the retryable error screen
-  // Seating plans are loaded after the core data with their own realistic
-  // timeout and carry forward any plan already held if a read fails.
+  // The seating-plan read starts in the same tick as the core read (one request
+  // for the whole /seating_plans node, scoped to this college's exams) with its
+  // own realistic timeout, and carries forward any plan already held if a read
+  // fails.
   async function loadCollegeData() {
     setDataLoading(true);
     setDataError("");
@@ -24772,7 +24928,7 @@ const queueWatchKey = (!booting && user && user.role === "admin" && dbOk
         getStudents:   () => Store.getStudents(),
         getHalls:      () => Store.getHalls(),
         getExams:      () => Store.getExams(),
-        getSeatingPlan:(examId) => Store.getSeatingPlan(examId),
+        getAllSeatingPlans: () => Store.getAllSeatingPlans(),
       }, { coreTimeoutMs: DATA_LOAD_TIMEOUT_MS, previousPlans: seatingPlans });
       setStudents(data.students);
       setHalls(fixHallCapacities(data.halls));

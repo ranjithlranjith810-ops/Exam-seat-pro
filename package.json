@@ -1,0 +1,9 @@
+{
+  "name": "examseatpro",
+  "private": true,
+  "version": "6.6.0",
+  "description": "ExamSeat Pro — single-page app deployed as-is, plus the Netlify functions (cat-llm, retention-cleanup). This package file exists so Netlify installs the firebase-admin dependency the scheduled retention job needs at build time. No build step is required to run the app itself.",
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}
