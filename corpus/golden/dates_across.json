@@ -1,0 +1,234 @@
+{
+  "name": "dates_across",
+  "note": "the transpose: dates across the top, years down the left",
+  "layout": "dates-across",
+  "ruled": true,
+  "sessions": false,
+  "allowNoCode": false,
+  "allowNoStaff": false,
+  "expectNoSections": false,
+  "unknownDept": null,
+  "deptCode": "CIVIL",
+  "secondDeptCode": null,
+  "sections": null,
+  "years": [
+    2,
+    3,
+    4
+  ],
+  "expectTables": 1,
+  "meta": {
+    "academicYear": "2026-27",
+    "term": "odd",
+    "dateRange": {
+      "from": "2026-10-06",
+      "to": "2026-10-16"
+    }
+  },
+  "exams": [
+    {
+      "key": "CIVIL|2026-10-06|2|",
+      "dept": "CIVIL",
+      "date": "2026-10-06",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV2501",
+          "name": "Surveying"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. H. Iyer"
+      ]
+    },
+    {
+      "key": "CIVIL|2026-10-07|2|",
+      "dept": "CIVIL",
+      "date": "2026-10-07",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV2502",
+          "name": "Concrete Technology"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. J. Nair"
+      ]
+    },
+    {
+      "key": "CIVIL|2026-10-08|2|",
+      "dept": "CIVIL",
+      "date": "2026-10-08",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV2503",
+          "name": "Structural Mechanics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. G. Das"
+      ]
+    },
+    {
+      "key": "CIVIL|2026-10-09|2|",
+      "dept": "CIVIL",
+      "date": "2026-10-09",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV2504",
+          "name": "Geotechnical Engineering"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. F. Rao"
+      ]
+    },
+    {
+      "key": "CIVIL|2026-10-06|3|",
+      "dept": "CIVIL",
+      "date": "2026-10-06",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV3501",
+          "name": "Design of Structures"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. D. Kumar"
+      ]
+    },
+    {
+      "key": "CIVIL|2026-10-07|3|",
+      "dept": "CIVIL",
+      "date": "2026-10-07",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV3502",
+          "name": "Transportation Engineering"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. C. Menon"
+      ]
+    },
+    {
+      "key": "CIVIL|2026-10-08|3|",
+      "dept": "CIVIL",
+      "date": "2026-10-08",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV3503",
+          "name": "Water Resources"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. E. Pillai"
+      ]
+    },
+    {
+      "key": "CIVIL|2026-10-09|3|",
+      "dept": "CIVIL",
+      "date": "2026-10-09",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV3504",
+          "name": "Environmental Engineering"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. A. Singh"
+      ]
+    },
+    {
+      "key": "CIVIL|2026-10-06|4|",
+      "dept": "CIVIL",
+      "date": "2026-10-06",
+      "year": 4,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV4501",
+          "name": "Estimating and Costing"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. Z. Nair"
+      ]
+    },
+    {
+      "key": "CIVIL|2026-10-07|4|",
+      "dept": "CIVIL",
+      "date": "2026-10-07",
+      "year": 4,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV4502",
+          "name": "Construction Management"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. Y. Das"
+      ]
+    },
+    {
+      "key": "CIVIL|2026-10-08|4|",
+      "dept": "CIVIL",
+      "date": "2026-10-08",
+      "year": 4,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV4503",
+          "name": "Prestressed Concrete"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. X. Rao"
+      ]
+    },
+    {
+      "key": "CIVIL|2026-10-09|4|",
+      "dept": "CIVIL",
+      "date": "2026-10-09",
+      "year": 4,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CV4504",
+          "name": "Project Work"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. W. Iyer"
+      ]
+    }
+  ]
+}

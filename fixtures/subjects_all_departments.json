@@ -1,0 +1,758 @@
+{
+  "metadata": {
+    "institution": "St. Mother Theresa Engineering College, Vagaikulam, Tuticorin",
+    "academic_year": "2026-27",
+    "semester_period": "Odd Semester",
+    "assessment": "Continuous Assessment Test-II",
+    "assessment_dates": "2026-10-06 to 2026-10-16",
+    "exam_time": "9:30 AM to 12:30 PM"
+  },
+  "departments": {
+    "AI & DS": {
+      "department_name": "Artificial Intelligence and Data Science Engineering",
+      "semester_subjects": {
+        "Semester III": [
+          {
+            "subject_code": null,
+            "subject_name": "Naan Mudalvan",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "CS25C",
+            "subject_name": "09 - Java Programming",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "AD25C",
+            "subject_name": "01 - Exploratory Data Analysis",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "CS25C",
+            "subject_name": "11 - Operating Systems",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "CS25C",
+            "subject_name": "08 - Data Structures",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "MA25C",
+            "subject_name": "08 - Discrete Mathematics",
+            "date": "2026-10-15",
+            "weekday": "THURSDAY",
+            "year": "II YEAR"
+          }
+        ],
+        "Semester V": [
+          {
+            "subject_code": "CS3551",
+            "subject_name": "Distributed Computing",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CW3551",
+            "subject_name": "Data and Information Security",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "AD3501",
+            "subject_name": "Deep Learning",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CCS364",
+            "subject_name": "Soft Computing",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CCS334",
+            "subject_name": "Big Data Analytics",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CCS370",
+            "subject_name": "UI and UX Design",
+            "date": "2026-10-15",
+            "weekday": "THURSDAY",
+            "year": "III YEAR"
+          }
+        ]
+      }
+    },
+    "CSE": {
+      "department_name": "Computer Science and Engineering",
+      "semester_subjects": {
+        "Semester III": [
+          {
+            "subject_code": null,
+            "subject_name": "Naan Mudalvan",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "II YEAR (A & B)"
+          },
+          {
+            "subject_code": "CS25C",
+            "subject_name": "10 - OBJECT ORIENTED SOFTWARE ENGINEERING",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR (A & B)"
+          },
+          {
+            "subject_code": "CS25C",
+            "subject_name": "08 - DATA STRUCTURES",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "II YEAR (A & B)"
+          },
+          {
+            "subject_code": "CS25C",
+            "subject_name": "09 - JAVA PROGRAMMING",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "II YEAR (A & B)"
+          },
+          {
+            "subject_code": "MA25C",
+            "subject_name": "08 - DISCRETE MATHEMATICS",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR (A & B)"
+          },
+          {
+            "subject_code": "CS25C",
+            "subject_name": "11 - OPERATING SYSTEMS",
+            "date": "2026-10-15",
+            "weekday": "THURSDAY",
+            "year": "II YEAR (A & B)"
+          }
+        ],
+        "Semester V": [
+          {
+            "subject_code": "CCS375",
+            "subject_name": "WEB TECHNOLOGIES",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "III YEAR (A & B)"
+          },
+          {
+            "subject_code": "CS3591",
+            "subject_name": "COMPUTER NETWORKS",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR (A & B)"
+          },
+          {
+            "subject_code": "CCS334",
+            "subject_name": "BIG DATA ANALYSTICS",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "III YEAR (A & B)"
+          },
+          {
+            "subject_code": "CS3501",
+            "subject_name": "COMPILER DESIGN",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "III YEAR (A & B)"
+          },
+          {
+            "subject_code": "CB 3491",
+            "subject_name": "CRYPTOGRAPHY AND CYBER SECURITY",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR (A & B)"
+          },
+          {
+            "subject_code": "CS 3551",
+            "subject_name": "DISTRIBUTED COMPUTING",
+            "date": "2026-10-15",
+            "weekday": "THURSDAY",
+            "year": "III YEAR (A & B)"
+          }
+        ],
+        "Semester VII": [
+          {
+            "subject_code": "GE3751",
+            "subject_name": "PRINCIPLES OF MANAGEMENT",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "IV YEAR (A & B)"
+          },
+          {
+            "subject_code": "CME365",
+            "subject_name": "RENEWABLE ENERGY TECHNOLOGIES",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "IV YEAR (A & B)"
+          },
+          {
+            "subject_code": "OMR353",
+            "subject_name": "SENSORS",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "IV YEAR (A & B)"
+          },
+          {
+            "subject_code": null,
+            "subject_name": "Naan Mudalvan",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "IV YEAR (A & B)"
+          },
+          {
+            "subject_code": "GE3791",
+            "subject_name": "HUMAN VALUES AND ETHICS",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "IV YEAR (A & B)"
+          }
+        ]
+      }
+    },
+    "EEE": {
+      "department_name": "Electrical and Electronics Engineering",
+      "semester_subjects": {
+        "Semester III": [
+          {
+            "subject_code": "EE25C",
+            "subject_name": "05 - Electronic Devices and Circuits",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EE25C",
+            "subject_name": "10- Electromagnetic Theory",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EE25302",
+            "subject_name": "Electric Circuit Analysis",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EE25301",
+            "subject_name": "Digital electronics",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "MA25C",
+            "subject_name": "04 - Matrices For Engineers",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR"
+          }
+        ],
+        "Semester V": [
+          {
+            "subject_code": "EE3012",
+            "subject_name": "Electrical Drives",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "EE3503",
+            "subject_name": "Control Systems",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "EE3501",
+            "subject_name": "Power System Analysis",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "EE3014",
+            "subject_name": "Power Electronics for Renewable Energy Systems",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "EE3016",
+            "subject_name": "Embedded System Design",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "EE3591",
+            "subject_name": "Power Electronics",
+            "date": "2026-10-15",
+            "weekday": "THURSDAY",
+            "year": "III YEAR"
+          }
+        ],
+        "Semester VII": [
+          {
+            "subject_code": "OCS351",
+            "subject_name": "Artificial Intelligence and Machinee Learning Fundementals",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "GE3791",
+            "subject_name": "Human Values and Ethics",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "GE3792",
+            "subject_name": "Industrial Management",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": null,
+            "subject_name": "Naan Mudalvan",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "ORA351",
+            "subject_name": "Foundations of Robotics",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "EE3023",
+            "subject_name": "MEMS and NEMS",
+            "date": "2026-10-15",
+            "weekday": "THURSDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "EE3701",
+            "subject_name": "High Voltage Engineering",
+            "date": "2026-10-16",
+            "weekday": "FRIDAY",
+            "year": "IV YEAR"
+          }
+        ]
+      }
+    },
+    "ECE": {
+      "department_name": "Electronics and Communication Engineering",
+      "semester_subjects": {
+        "Semester III": [
+          {
+            "subject_code": "MA25C05",
+            "subject_name": "Probability Statistics and Random Processes",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EC25C05",
+            "subject_name": "Electronic Circuit Analysis",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EC25C06",
+            "subject_name": "Electro Magnetic Fields And transmission Lines",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EC25C07",
+            "subject_name": "Digital System Design",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EC25C04",
+            "subject_name": "Signals and Systems",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR"
+          }
+        ],
+        "Semester V": [
+          {
+            "subject_code": "EC3551",
+            "subject_name": "Transmission Lines and RF Systems",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "EC3552",
+            "subject_name": "VLSI and Chip Design",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "EC3501",
+            "subject_name": "Wireless Communication",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CEC339",
+            "subject_name": "Fundamendals of Nano Electronics",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CEC341",
+            "subject_name": "MIC and RF Design",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CEC356",
+            "subject_name": "Speech processing",
+            "date": "2026-10-15",
+            "weekday": "THURSDAY",
+            "year": "III YEAR"
+          }
+        ],
+        "Semester VII": [
+          {
+            "subject_code": "CCS342",
+            "subject_name": "DevOps",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "GE3791",
+            "subject_name": "Human Values and Ethics",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "GE3792",
+            "subject_name": "Industrial Management",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": null,
+            "subject_name": "Naan Mudalvan",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "ORA351",
+            "subject_name": "Foundations of Robotics",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "IV YEAR"
+          }
+        ]
+      }
+    },
+    "MECH": {
+      "department_name": "Mechanical Engineering",
+      "semester_subjects": {
+        "Semester III": [
+          {
+            "subject_code": "ME25C",
+            "subject_name": "08 Metallurgy and Materials Science",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "ME25301",
+            "subject_name": "Engineering Thermodynamics",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EC25C",
+            "subject_name": "17 Embedded Systems",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "CE25C",
+            "subject_name": "11 Strength of Materials",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "MA 25C",
+            "subject_name": "03 Computational Differential Equations",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "ME25C",
+            "subject_name": "07 Applied Engineering Mechanics",
+            "date": "2026-10-15",
+            "weekday": "THURSDAY",
+            "year": "II YEAR"
+          }
+        ],
+        "Semester V": [
+          {
+            "subject_code": "ME3592",
+            "subject_name": "Metrology and Measurements",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CME 331",
+            "subject_name": "Additive Manufacturing",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CME 348",
+            "subject_name": "Modern Robotics",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CME 372",
+            "subject_name": "CAD & CAE",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "ME3591",
+            "subject_name": "Design of Machine Elements",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR"
+          }
+        ],
+        "Semester VII": [
+          {
+            "subject_code": "OLM353",
+            "subject_name": "Production Planning and Control",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "GE3791",
+            "subject_name": "Human Values and Ethics",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "GE3792",
+            "subject_name": "Industrial Management",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": null,
+            "subject_name": "Naan Mudalvan",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "ORA351",
+            "subject_name": "Foundations of Robotics",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "ME3792",
+            "subject_name": "Computer Integrated Manufacturing",
+            "date": "2026-10-15",
+            "weekday": "THURSDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "ME3791",
+            "subject_name": "Mechatronics and IoT",
+            "date": "2026-10-16",
+            "weekday": "FRIDAY",
+            "year": "IV YEAR"
+          }
+        ]
+      }
+    }
+  },
+  "additional_timetable_variants": {
+    "ECE_revised": {
+      "department_name": "Electronics and Communication Engineering",
+      "timetable_variant": "Revised TT ECE",
+      "semester_subjects": {
+        "Semester III": [
+          {
+            "subject_code": "MA25C",
+            "subject_name": "05 Probability Statistics and Random Processes",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EC25C",
+            "subject_name": "05 Electronic Circuit Analysis",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EC25C",
+            "subject_name": "06 Electro Magnetic Fields And transmission Lines",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EC25C",
+            "subject_name": "07 Digital System Design",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "II YEAR"
+          },
+          {
+            "subject_code": "EC25C",
+            "subject_name": "04 Signals and Systems",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "II YEAR"
+          }
+        ],
+        "Semester V": [
+          {
+            "subject_code": "CEC339",
+            "subject_name": "Fundamendals of Nano Electronics",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "EC3552",
+            "subject_name": "VLSI and Chip Design",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "EC3501",
+            "subject_name": "Wireless Communication",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "EC3551",
+            "subject_name": "Transmission Lines and RF Systems",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CEC341",
+            "subject_name": "MIC and RF Design",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "III YEAR"
+          },
+          {
+            "subject_code": "CEC356",
+            "subject_name": "Speech processing",
+            "date": "2026-10-15",
+            "weekday": "THURSDAY",
+            "year": "III YEAR"
+          }
+        ],
+        "Semester VII": [
+          {
+            "subject_code": "CCS342",
+            "subject_name": "DevOps",
+            "date": "2026-10-06",
+            "weekday": "TUESDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "GE3791",
+            "subject_name": "Human Values and Ethics",
+            "date": "2026-10-07",
+            "weekday": "WEDNESDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "GE3792",
+            "subject_name": "Industrial Management",
+            "date": "2026-10-08",
+            "weekday": "THURSDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": null,
+            "subject_name": "Naan Mudalvan",
+            "date": "2026-10-09",
+            "weekday": "FRIDAY",
+            "year": "IV YEAR"
+          },
+          {
+            "subject_code": "ORA351",
+            "subject_name": "Foundations of Robotics",
+            "date": "2026-10-14",
+            "weekday": "WEDNESDAY",
+            "year": "IV YEAR"
+          }
+        ]
+      }
+    }
+  }
+}

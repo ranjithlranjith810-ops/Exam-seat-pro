@@ -1,0 +1,167 @@
+{
+  "name": "roman_and_arabic_years",
+  "note": "year headings written as words, roman numerals and digits in one table",
+  "layout": "years-across",
+  "ruled": true,
+  "sessions": false,
+  "allowNoCode": false,
+  "allowNoStaff": false,
+  "expectNoSections": false,
+  "unknownDept": null,
+  "deptCode": "CSE",
+  "secondDeptCode": null,
+  "sections": null,
+  "years": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "expectTables": 1,
+  "meta": {
+    "academicYear": "2026-27",
+    "term": "odd",
+    "dateRange": {
+      "from": "2026-10-06",
+      "to": "2026-10-16"
+    }
+  },
+  "exams": [
+    {
+      "key": "CSE|2026-10-06|1|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 1,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS1501",
+          "name": "Basics of C"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. A. Kumar"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-06|2|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS2501",
+          "name": "Data Structures"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. S. Menon"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-06|3|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS3501",
+          "name": "Theory of Computation"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. R. Iyer"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-06|4|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 4,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS4501",
+          "name": "Compiler Design"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Mr. B. Nair"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|1|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 1,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS1502",
+          "name": "Programming Laboratory"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. P. Das"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|2|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS2502",
+          "name": "Discrete Mathematics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. L. Das"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|3|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS3502",
+          "name": "Database Systems"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Mr. T. Varghese"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|4|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 4,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS4502",
+          "name": "Operating Systems"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. M. Fernandes"
+      ]
+    }
+  ]
+}

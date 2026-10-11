@@ -1,0 +1,97 @@
+{
+  "name": "split_code_name_staff",
+  "note": "CODE | SUBJECT | STAFF in three separate columns per year",
+  "layout": "years-across-split",
+  "ruled": true,
+  "sessions": false,
+  "allowNoCode": false,
+  "allowNoStaff": false,
+  "expectNoSections": false,
+  "unknownDept": null,
+  "deptCode": "CSE",
+  "secondDeptCode": null,
+  "sections": null,
+  "years": [
+    2,
+    3
+  ],
+  "expectTables": 1,
+  "meta": {
+    "academicYear": "2026-27",
+    "term": "odd",
+    "dateRange": {
+      "from": "2026-10-06",
+      "to": "2026-10-16"
+    }
+  },
+  "exams": [
+    {
+      "key": "CSE|2026-10-06|2|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS25C01",
+          "name": "Discrete Mathematics"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. A. Kumar"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-06|3|",
+      "dept": "CSE",
+      "date": "2026-10-06",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS3501",
+          "name": "Theory of Computation"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. R. Iyer"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|2|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 2,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS25C02",
+          "name": "Data Structures"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Dr. S. Menon"
+      ]
+    },
+    {
+      "key": "CSE|2026-10-07|3|",
+      "dept": "CSE",
+      "date": "2026-10-07",
+      "year": 3,
+      "session": null,
+      "subjects": [
+        {
+          "code": "CS3502",
+          "name": "Database Systems"
+        }
+      ],
+      "nonExam": [],
+      "staff": [
+        "Ms. L. Das"
+      ]
+    }
+  ]
+}
