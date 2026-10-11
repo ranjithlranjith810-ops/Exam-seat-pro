@@ -14,7 +14,6 @@ const suites = [
   require("./tests/cat_llm.test.js"),
   require("./subjects_import.test.js"),
   require("./cat_json_import.test.js"),
-<<<<<<< HEAD
   require("./cat_json_identity.test.js"),
   require("./data_load_resilience.test.js"),
   require("./bulk_seating.test.js"),
@@ -29,7 +28,5 @@ const suites = [
   require("./hall_utilization.test.js"),
   require("./hall_notice_layout.test.js"),
   require("./seating_grid_consistency.test.js"),
-=======
->>>>>>> origin/main
 ];
 report(suites).then((fail) => process.exit(fail ? 1 : 0));

@@ -98,25 +98,15 @@ it("T1: 3x3 checkerboard fills A1.1/A1.3/B1.2/C1.1/C1.3 with one dept", () => {
 
 // ── T2: same-bench neighbours ARE checked (the old false negative) ───────────
 //
-<<<<<<< HEAD
 // A1.2 sits immediately beside A1.1, so a second CSE must not take it. The
 // allocator's back-fill then fills A1.2 with the ECE (a legal student) and the
 // second CSE moves on to A1.3 — the same physical guarantee as before, minus the
 // wasted empty seat. The seat never holds a second CSE, which is the point.
-=======
-// A1.2 sits immediately beside A1.1, so a second CSE must not take it. The seat
-// is left EMPTY and the student moves on to A1.3 — which is the whole point:
-// rejecting a seat is not the same as dropping a student.
->>>>>>> origin/main
 //
 // Two departments are present on purpose. With only one department the rule
 // switches itself off as unsatisfiable (see T6), and this test would prove
 // nothing.
-<<<<<<< HEAD
 it("T2: same-bench slot si-1 is compared, so a 2nd CSE cannot take A1.2", () => {
-=======
-it("T2: same-bench slot si-1 is compared, so A1.2 is skipped for a 2nd CSE", () => {
->>>>>>> origin/main
   const students = [
     stu(1, "CSE", 2, "male"), stu(2, "CSE", 2, "male"), stu(3, "ECE", 2, "male"),
   ];
@@ -124,21 +114,14 @@ it("T2: same-bench slot si-1 is compared, so A1.2 is skipped for a 2nd CSE", () 
   const seats = seatsOf(res);
   eq(res.unplaced.length, 0, "no student was unplaced");
   eq(deptAt(seats, "A1.1"), "CSE", "A1.1 takes the first CSE");
-<<<<<<< HEAD
   eq(deptAt(seats, "A1.2"), "ECE", "A1.2 refuses a 2nd CSE (beside A1.1) and is back-filled with the ECE");
   eq(deptAt(seats, "A1.3"), "CSE", "A1.3 takes the second CSE, now standing beside the ECE");
   eq(deptAt(seats, "B1.1"), "", "B1.1 stays empty — facing the CSE at A1.3, no remaining student fits");
   eq(validate(res.plan, CAT_RULES).length, 0, "no adjacency violations");
-=======
-  eq(deptAt(seats, "A1.2"), "", "A1.2 is empty — it is beside A1.1");
-  eq(deptAt(seats, "A1.3"), "CSE", "A1.3 takes the second CSE");
-  eq(deptAt(seats, "B1.1"), "ECE", "B1.1 takes the ECE, which faces A1.3 (CSE)");
->>>>>>> origin/main
 });
 
 // ── T3: non-facing same-dept seats are LEGAL (the old false positive) ─────────
 //
-<<<<<<< HEAD
 // The second CSE here lands at A1.3: slot 1 and slot 3 of the same bench are NOT
 // adjacent (A1.2 sits between them), so CSE/A1.1 and CSE/A1.3 are a legal
 // same-dept pair, and the planner places them back-to-back without a gap. The
@@ -147,13 +130,6 @@ it("T2: same-bench slot si-1 is compared, so A1.2 is skipped for a 2nd CSE", () 
 // stranded. Benches are never compared, so the bench-separated CSE legal pair in
 // this plan validates clean (as does the two-benches-apart pair in T8).
 it("T3: a same-dept seat with another seat between is not treated as adjacent", () => {
-=======
-// B1.3 = CSE here shares a department with A1.1 = CSE, but the two seats are two
-// benches and one slot apart, so nothing about them is adjacent. The previous
-// rule compared a seat against ALL of the previous bench, so A1.1's department
-// made B1.3 look conflicting, the seat was skipped and the student was stranded.
-it("T3: a same-dept seat two benches away is not treated as adjacent", () => {
->>>>>>> origin/main
   const students = [
     stu(1, "CSE", 2, "male"), stu(2, "ECE", 2, "male"),
     stu(3, "ECE", 2, "male"), stu(4, "CSE", 2, "male"),
@@ -162,16 +138,10 @@ it("T3: a same-dept seat two benches away is not treated as adjacent", () => {
   const seats = seatsOf(res);
   eq(res.unplaced.length, 0, "no student was unplaced");
   eq(deptAt(seats, "A1.1"), "CSE", "A1.1 CSE");
-<<<<<<< HEAD
   eq(deptAt(seats, "A1.2"), "ECE", "A1.2 ECE sits beside A1.1");
   eq(deptAt(seats, "A1.3"), "CSE", "A1.3 CSE — same dept as A1.1, but not adjacent to it");
   eq(deptAt(seats, "B1.1"), "ECE", "B1.1 ECE faces A1.3 CSE");
   eq(validate(res.plan, CAT_RULES).length, 0, "a bench-separated same-dept pair is not a violation");
-=======
-  eq(deptAt(seats, "B1.3"), "CSE", "B1.3 CSE — same dept as A1.1, but not adjacent to it");
-  eq(deptAt(seats, "B1.2"), "ECE", "B1.2 ECE sits beside B1.3");
-  eq(validate(res.plan, CAT_RULES).length, 0, "no adjacency violations");
->>>>>>> origin/main
 });
 
 // ── T4: front-to-back is never compared ─────────────────────────────────────
@@ -272,7 +242,6 @@ it("T8: validatePlan reports a real facing-seat conflict and ignores a non-facin
   eq(validate(good, CAT_RULES).length, 0, "non-facing same-dept is not a violation");
 });
 
-<<<<<<< HEAD
 // ── T9: there is no legacy model any more — noSameDept alone behaves like ─────
 //
 // CAT. The bug this pins: with only "No Same Department Side-by-Side" on (CAT
@@ -292,21 +261,6 @@ it("T9: noSameDept without benchAdjacency still prevents same-bench adjacency", 
   eq(deptAt(seats, "A1.3"), "CSE", "the second CSE moves on to A1.3");
   eq(deptAt(seats, "B1.1"), "", "B1.1 is empty — it faces the CSE at A1.3");
   eq(validate(res.plan, rules).length, 0, "the plan validates clean");
-=======
-// ── T9: legacy behaviour is untouched when the flag is off ──────────────────
-//
-// University exams keep the old whole-previous-bench comparison, and same-bench
-// adjacency stays allowed. This is the guard that the CAT change did not leak
-// into other categories.
-it("T9: without benchAdjacency the legacy whole-bench rule still applies", () => {
-  const rules = { splitGender: false, noSameDept: true, noSameYear: false };
-  const students = [stu(1, "CSE", 2, "male"), stu(2, "CSE", 2, "male")];
-  const res = place(students, [hall("h1", "Hall A", 1, [3, 3])], 0, {}, rules);
-  const seats = seatsOf(res);
-  eq(deptAt(seats, "A1.1"), "CSE", "A1.1 CSE");
-  eq(deptAt(seats, "A1.2"), "CSE", "A1.2 CSE — same-bench adjacency still allowed");
-  eq(seats.filter((x) => x.colIdx === 1).length, 0, "bench B untouched by the legacy rule");
->>>>>>> origin/main
 });
 
 // ── T10: ragged bench widths still find the true facing seat ───────────────
@@ -338,31 +292,20 @@ it("T10: ragged bench widths — facing seat is the previous bench's rightmost s
 
 // ── T11: no-same-year follows the corrected facing-seat model too ──────────
 //
-<<<<<<< HEAD
 // B1.1 faces A1.1, so a year-2 student cannot take it: the year-2 ECE is refused
 // there. B1.2 is beside B1.1, not beside A1.1, so it is free — the year-3 CSE
 // back-fills B1.1 (facing a year-2 student, which is fine) and the year-2 ECE
 // takes B1.2 (beside a year-3 student, which is fine).
-=======
-// B1.1 faces A1.1, so a year-2 student cannot take it. B1.2 is beside B1.1, not
-// beside A1.1, so it is free.
->>>>>>> origin/main
 it("T11: noSameYear is compared on facing seats only under benchAdjacency", () => {
   const rules = { splitGender: false, noSameDept: false, noSameYear: true, benchAdjacency: true };
   const students = [stu(1, "CSE", 2, "male"), stu(2, "ECE", 2, "male"), stu(3, "CSE", 3, "male")];
   const res = place(students, [hall("h1", "Hall A", 1, [1, 3])], 0, {}, rules);
   const seats = seatsOf(res);
   eq(res.unplaced.length, 0, "everyone placed");
-<<<<<<< HEAD
   eq(seatOf(seats, "B1.1").year, 3, "B1.1 refused the year-2 student (faces year-2 A1.1) and is back-filled with year 3");
   eq(seatOf(seats, "B1.2").year, 2, "B1.2 takes the year-2 student, beside a year-3 student");
   eq(deptAt(seats, "B1.3"), "", "B1.3 stays empty — the cohort is fully seated");
   eq(validate(res.plan, rules).length, 0, "no year adjacency violations");
-=======
-  eq(deptAt(seats, "B1.1"), "", "B1.1 is empty — it faces the year-2 A1.1");
-  eq(seatOf(seats, "B1.2").year, 2, "B1.2 takes the year-2 student");
-  eq(seatOf(seats, "B1.3").year, 3, "B1.3 takes the year-3 student");
->>>>>>> origin/main
 });
 
 // ── T12: gender split still separates halls under CAT rules ────────────────

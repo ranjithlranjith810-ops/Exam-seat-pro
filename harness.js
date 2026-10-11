@@ -29,7 +29,6 @@ const SEATING_ENGINE = new Set([
   "calcHallCapacity",
   "buildSeatingReport",
   "benchAdjacencyActive",
-<<<<<<< HEAD
   "sideBySideRulesActive",
   "benchFacingSeat",
   "byRegNo",
@@ -122,10 +121,6 @@ const BULK_ENGINE = new Set([
   "bulkYield",
   "bulkSummarize",
   "runBulkSeating",
-=======
-  "benchFacingSeat",
-  "byRegNo",
->>>>>>> origin/main
 ]);
 
 function load() {
@@ -155,14 +150,10 @@ function load() {
   // functions are pulled in as a set, and a prefix match would drag unrelated
   // app wiring (and browser-only globals) into the sandbox.
   const engine = all.filter((n) => SEATING_ENGINE.has(n) && !isJsx(n));
-<<<<<<< HEAD
   const loadEngine = all.filter((n) => LOAD_ENGINE.has(n) && !isJsx(n));
   const bulkEngine = all.filter((n) => BULK_ENGINE.has(n) && !isJsx(n));
   const noticeEngine = all.filter((n) => NOTICE_ENGINE.has(n) && !isJsx(n));
   const names = [...new Set([...shared, ...catFns, ...engine, ...loadEngine, ...bulkEngine, ...noticeEngine])];
-=======
-  const names = [...new Set([...shared, ...catFns, ...engine])];
->>>>>>> origin/main
   const needed = names.filter((n) => !fns[n]);
   if (needed.length) throw new Error("could not extract: " + needed.join(", "));
 
