@@ -1446,6 +1446,7 @@ function hnSeatKeys(s) {
   return keys;
 }
 
+<<<<<<< HEAD
 // FIRST-WINS DEDUPE — the single rule every hall-facing counter and the notice
 // grid share. Each physical seat keeps its first claimant and each student
 // appears once per hall+date+session (§30 no duplicates). Drops are logged,
@@ -1502,6 +1503,8 @@ function canonicalHallRecord(halls, nameKey) {
   return canon;
 }
 
+=======
+>>>>>>> origin/main
 // Canonical hall resolver. A plan entry may be keyed by hall id (auto-allocation
 // writes plan[hall.id]) or by seat.hallId / hall name (manual seating, legacy),
 // and its hp.hallName may be missing. Resolve against every available identifier
@@ -1522,6 +1525,7 @@ function resolveHall(halls, planKey, hp) {
   if (h) {
     // One physical hall is often stored as SEVERAL records with different ids but
     // the same name (e.g. a record created per department during import). Snapping
+<<<<<<< HEAD
     // to the ONE canonical record for that name (the largest layout, per
     // canonicalHallRecord) makes every hall-facing feature agree on a single
     // id/name/layout — otherwise each department's copy becomes its own hall
@@ -1530,6 +1534,15 @@ function resolveHall(halls, planKey, hp) {
     if (k) {
       const canon = canonicalHallRecord(halls, k);
       if (canon) h = canon;
+=======
+    // to the FIRST record for that name makes every hall-facing feature agree on
+    // ONE id/name/layout — otherwise each department's copy becomes its own
+    // hall notice. Keep the matched record if the canonical one has no layout.
+    const k = hnNormHall(h.name);
+    if (k) {
+      const first = halls.find(function(x){ return hnNormHall(x.name) === k; });
+      if (first && (first.layoutConfig || !h.layoutConfig)) h = first;
+>>>>>>> origin/main
     }
   }
   return h;
@@ -1542,6 +1555,7 @@ function resolveHall(halls, planKey, hp) {
 function hallNoticeOptions(halls, perHall, hallDates) {
   perHall = perHall || {}; hallDates = hallDates || {};
   const countByKey = {}, canonIdByKey = {}, datesByKey = {};
+<<<<<<< HEAD
   // Canonical id per physical hall: the FIRST record of that normalized name that
   // carries a layout, else the first record of that name — the exact same rule
   // resolveHall applies (§7), so a dropdown selection always addresses the same
@@ -1556,6 +1570,15 @@ function hallNoticeOptions(halls, perHall, hallDates) {
   nameKeys.forEach(function(records, k){
     const canon = canonicalHallRecord(halls, k);
     hallCanonId[k] = (canon || records[0]).id;
+=======
+  // Canonical id per physical hall: the FIRST record in the halls list with that
+  // normalized name — the exact same rule resolveHall applies, so a dropdown
+  // selection can never address a different id than the notice it generates.
+  const hallCanonId = {};
+  (halls || []).forEach(function(h){
+    const k = hnNormHall(h.name) || ("id:" + h.id);
+    if (!hallCanonId[k]) hallCanonId[k] = h.id;
+>>>>>>> origin/main
   });
   Object.keys(perHall).forEach(function(id){
     const k = hnNormHall(perHall[id].hallName) || ("id:" + id);
@@ -1594,6 +1617,7 @@ function hallOptionSeats(perHall, opt) {
   return seats;
 }
 
+<<<<<<< HEAD
 // Seated students per physical hall for the Hall Notice dashboard. Built from the
 // SAME first-wins deduped groups the notice renders (hallNoticesGroup), so the
 // selector count, the summary and the printed TOTAL always agree on the identical
@@ -1786,6 +1810,8 @@ function seatingGridIntegrityText(mergedCount, renderedCount) {
     + " land on a physical seat of the resolved layout. The saved plan was generated against a different hall record — regenerate the paper(s) to replace the plan.";
 }
 
+=======
+>>>>>>> origin/main
 // ── PLAN COLLISION DETECTION ──────────────────────────────────────────────────
 // Several plans may legitimately share one hall + date + session — multi-subject
 // use of a hall is REQUIRED to produce the single merged notice (spec §1), so
@@ -1965,11 +1991,14 @@ function hallNoticesGroup(exams, seatingPlans, halls, fDate, fSession, fHall) {
   });
   return Object.keys(groups).sort().map(function(key) {
     const g = groups[key];
+<<<<<<< HEAD
     // ONE first-wins canon for the whole notice path: the group's rows, total
     // and summary are the SAME surviving set the notice grid prints (spec §30),
     // so the selector count, the summary and the rendered TOTAL can never
     // disagree with each other.
     g.rows = hnNoticeDedupeRows(g.rows, g);
+=======
+>>>>>>> origin/main
     const subjCounts = {};
     g.rows.forEach(function(r) { subjCounts[r.subj] = (subjCounts[r.subj] || 0) + 1; });
     return { date: g.date, session: g.session, hall: g.hall, hallId: g.hallId, hallName: g.hallName,
@@ -2120,6 +2149,7 @@ function hnNoticeMetrics(nRows, maxSeats, nCols) {
     const colW = (HN_PAGE_W - 2 * HN_PAGE_PAD) / nCols - 2;   // minus td padding/borders
     const slotW = colW / maxSeats;
     const textW = slotW - 2 * 8 - 1 - 2;                      // side padding + separator + safety
+<<<<<<< HEAD
     const fullPx = 12 * 0.62 * 0.88 * 12;                     // 12 digits at full size
     s = Math.min(s, Math.max(0.3, textW / fullPx));
   }
@@ -2132,6 +2162,12 @@ function hnNoticeMetrics(nRows, maxSeats, nCols) {
   return { tableH: tableH, scale: Math.round(s * 1000) / 1000, head: head, summary: summary, sign: sign,
     textW: Math.round(fitTextW * 100) / 100, regnoPx: Math.round(fitRegnoPx * 100) / 100,
     fitOk: Math.round(fitRegnoPx * 100) / 100 <= Math.round(fitTextW * 100) / 100 };
+=======
+    const fullPx = 12 * 0.62 * 0.86 * 12;                     // 12 digits at full size
+    s = Math.min(s, Math.max(0.3, textW / fullPx));
+  }
+  return { tableH: tableH, scale: Math.round(s * 1000) / 1000, head: head, summary: summary, sign: sign };
+>>>>>>> origin/main
 }
 
 // Compact metrics used ONLY by the PRINT-combined sheets: when a date + physical
@@ -2152,6 +2188,7 @@ function hnNoticeMetricsHalf(nRows, maxSeats, nCols) {
     const colW = (HN_PAGE_W - 2 * HN_PAGE_PAD) / nCols - 2;   // minus td padding/borders
     const slotW = colW / maxSeats;
     const textW = slotW - 2 * 8 - 1 - 2;                      // side padding + separator + safety
+<<<<<<< HEAD
     const fullPx = 12 * 0.62 * 0.88 * 12;                     // 12 digits at full size
     s = Math.min(s, Math.max(0.3, textW / fullPx));
   }
@@ -2161,6 +2198,12 @@ function hnNoticeMetricsHalf(nRows, maxSeats, nCols) {
   return { tableH: tableH, scale: Math.round(s * 1000) / 1000, head: head, summary: summary, sign: sign,
     textW: Math.round(fitTextW * 100) / 100, regnoPx: Math.round(fitRegnoPx * 100) / 100,
     fitOk: Math.round(fitRegnoPx * 100) / 100 <= Math.round(fitTextW * 100) / 100 };
+=======
+    const fullPx = 12 * 0.62 * 0.86 * 12;                     // 12 digits at full size
+    s = Math.min(s, Math.max(0.3, textW / fullPx));
+  }
+  return { tableH: tableH, scale: Math.round(s * 1000) / 1000, head: head, summary: summary, sign: sign };
+>>>>>>> origin/main
 }
 
 function hnNoticeStylesheet() {
@@ -2221,6 +2264,7 @@ function hnNoticeStylesheet() {
     // label, register number, dept — sits vertically centred with comfortable
     // breathing room. The summary/signature stay pinned to the bottom.
     '.pf-tablewrap{flex:1 1 auto;min-height:0;display:flex;align-items:stretch;justify-content:flex-start;}',
+<<<<<<< HEAD
     // .pf-table fills the reserved wrap so every cell of a hall (occupying or
     // empty seats alike) is given an equal share of the grid height — a short
     // hall never ends with a fat dead row, and every seat block reads on the same
@@ -2233,17 +2277,31 @@ function hnNoticeStylesheet() {
     // contrast against the page and the shade.
     '.pf-table tbody tr:nth-child(even) td.tcell{background:#f3f6fb;}',
     '.pf-table td.tcell{vertical-align:middle;border:1px solid #999;padding:4px 2px;text-align:center;}',
+=======
+    '.pf-table{width:100%;border-collapse:collapse;table-layout:fixed;}',
+    '.pf-table th.colhdr{background:#1e3a8a;color:#fff;padding:4px 2px;font-size:.78em;',
+    '  text-transform:uppercase;letter-spacing:1px;border:1px solid #000;text-align:center;font-weight:900;}',
+    '.pf-table td.tcell{vertical-align:middle;border:1px solid #999;padding:3px 1px;text-align:center;}',
+>>>>>>> origin/main
     '.pf-table td.tcell.aisle{border-left:6px solid #fff;background:#f1f5f9;}',
     // ── Slots of the SAME bench laid out HORIZONTALLY (§3, §4) ──────────────
     // Purely visual: each slot keeps its own cell and its own saved label, so
     // .1 is always left, .2 always right, and an empty slot still holds its
     // position instead of shifting the next student along.
+<<<<<<< HEAD
     '.slotrow{display:flex;flex-wrap:wrap;align-items:stretch;justify-content:center;height:100%;}',
+=======
+    '.slotrow{display:flex;flex-wrap:wrap;align-items:stretch;justify-content:center;}',
+>>>>>>> origin/main
     '.slotcell{flex:1 1 0;min-width:0;display:flex;}',
     // Each student block is its own independent container. Horizontal 8px padding on
     // BOTH sides gives every register number a comfortable, non-colliding area and
     // keeps the text clear of the separator line (§"independent blocks").
+<<<<<<< HEAD
     '.cell{border-right:1px solid #444;padding:4px 8px;width:100%;display:flex;flex-direction:column;justify-content:center;gap:2px;}',
+=======
+    '.cell{border-right:1px solid #555;padding:3px 8px;width:100%;}',
+>>>>>>> origin/main
     // A clear line separates each student block inside a bench. It is suppressed
     // only on the RIGHTMOST slot of the row (the `.cell` is the sole child of its
     // `.slotcell`, so a bare `.cell:last-child` rule would match EVERY student
@@ -2253,6 +2311,7 @@ function hnNoticeStylesheet() {
     // and reserves NO vertical or horizontal space of its own (§8): it is stretched
     // to match its occupied neighbour, and an entirely empty bench collapses.
     '.cell.empty{min-height:0;}',
+<<<<<<< HEAD
     // Seat block: the saved seat label sits on its own line with a dotted rule
     // beneath it, so "A1.1" reads as a unit above the register number and the
     // divider never collides with the regno's ascenders.
@@ -2268,6 +2327,15 @@ function hnNoticeStylesheet() {
     // never shove the total off its baseline (§"aligned summary/total").
     '.pf-subjects{font-size:.88em;line-height:1.45;flex:1 1 auto;padding-right:12px;}',
     '.pf-total{font-size:.95em;font-weight:900;border-left:1px solid #000;padding-left:10px;white-space:nowrap;align-self:flex-start;}',
+=======
+    '.seat{font-size:.78em;font-weight:900;text-transform:uppercase;line-height:1.15;text-align:center;}',
+    '.lab{font-size:.58em;font-weight:700;color:#555;text-transform:uppercase;line-height:1.15;text-align:center;letter-spacing:.4px;}',
+    '.val{font-size:.86em;font-weight:900;line-height:1.2;text-align:center;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;}',
+    '.pf-summary{flex:0 0 auto;display:flex;justify-content:space-between;align-items:flex-start;',
+    '  border:1px solid #000;padding:5px 8px;margin-top:' + 8 + 'px;}',
+    '.pf-subjects{font-size:.88em;line-height:1.45;}',
+    '.pf-total{font-size:.95em;font-weight:900;border-left:1px solid #000;padding-left:10px;white-space:nowrap;}',
+>>>>>>> origin/main
     '.pf-sign{flex:0 0 auto;display:flex;justify-content:space-between;gap:18px;margin-top:' + 8 + 'px;}',
     '.pf-signbox{flex:1;text-align:center;font-size:.85em;font-weight:700;}',
     '.pf-signlabel{line-height:1.35;}',
@@ -2326,11 +2394,33 @@ function hnRenderNoticePage(group, col, mode) {
     : hnNoticeMetrics(L.nRows, L.maxSeats, L.nCols);
 
   // Keep the first claimant of each physical seat and the first appearance of
+<<<<<<< HEAD
   // each student (§30 no duplicates). Drops are logged, never silent. This is
   // the SAME first-wins rule the notice selector and the group total use, so the
   // summary, TOTAL and the dropdown "(N seated)" always count the identical
   // surviving set — a raw count can never promise more students than this grid.
   const kept = hnNoticeDedupeRows(group.rows, group);
+=======
+  // each student (§30 no duplicates). Drops are logged, never silent.
+  const kept = [], regnoSeen = {}, seatOwner = {};
+  (group.rows || []).forEach(function(r) {
+    const dupKey = (group.hallId || "") + "|" + (group.date || "") + "|" + (group.session || "") + "|" + (r.regno || "");
+    if (regnoSeen[dupKey]) {
+      hnDebug("[HN-DEBUG] duplicate-regno-in-hall", { hallId: group.hallId, date: group.date, session: group.session, regno: r.regno });
+      return;
+    }
+    regnoSeen[dupKey] = true;
+    let owned = null;
+    hnSeatKeys(r).forEach(function(k) { if (!owned && seatOwner[k]) owned = seatOwner[k]; });
+    if (owned) {
+      hnDebug("[HN-DEBUG] seat-collision", { hallId: group.hallId, date: group.date, session: group.session,
+        seatLabel: hnSeatLabel(r), keptRegno: owned.regno, droppedRegno: r.regno });
+      return;
+    }
+    hnSeatKeys(r).forEach(function(k) { if (!seatOwner[k]) seatOwner[k] = r; });
+    kept.push(r);
+  });
+>>>>>>> origin/main
 
   // Index by every saved identity so a seat lands in its exact physical cell.
   const bySeat = {};
@@ -2344,12 +2434,16 @@ function hnRenderNoticePage(group, col, mode) {
     subjCounts[code] = (subjCounts[code] || 0) + 1;
     if (code === "UNSPECIFIED") hnDebug("[HN-DEBUG] missing-subjectCode", { hallId: group.hallId, regno: r.regno });
   });
+<<<<<<< HEAD
   // Each subject reads "<CODE> — N student(s)" so a subject's student count can
   // never be mistaken for an unexplained numeric placeholder (§"no unexplained
   // numeric placeholder text"). It still sums to TOTAL and stays on the box line.
   const summary = Object.keys(subjCounts)
     .map(function(k) { return k + " — " + subjCounts[k] + " student" + (subjCounts[k] === 1 ? "" : "s"); })
     .join(", ") || "-";
+=======
+  const summary = Object.keys(subjCounts).map(function(k) { return k + "-" + subjCounts[k]; }).join(", ") || "-";
+>>>>>>> origin/main
   const total = kept.length;   // ALL occupied physical seats in this hall/session
 
   // The hall name is already canonicalised (name-matched) by hallNoticesGroup,
@@ -3195,6 +3289,7 @@ async function dbGet(collection, filters = []) {
   return results;
 }
 
+<<<<<<< HEAD
 // ── Data-load resilience ─────────────────────────────────────────────────────
 // The college-data load (students/halls/exams + seating plans) used to await
 // its RTDB reads with no bound at all. Because the ONLY place `dataLoading` is
@@ -3336,6 +3431,8 @@ async function loadCollegeDataSet(readers, options) {
   };
 }
 
+=======
+>>>>>>> origin/main
 // Subscribe to real-time changes for a college-scoped collection.
 // Uses RTDB's native on('value') listener — no polling, no repeated full reads,
 // no duplicate listeners (callers must hold the returned unsubscribe fn). The
@@ -3853,6 +3950,7 @@ function benchFacingSeat(benchSeats) {
   return facing;
 }
 
+<<<<<<< HEAD
 // The SINGLE authoritative activation gate for every side-by-side rule (No Same
 // Department, No Same Year, CAT Bench Adjacency). There is no separate "legacy"
 // model any more: whether the rule was toggled on its own or together with CAT
@@ -4088,6 +4186,17 @@ function planIntegrityProblems(plan) {
     });
   });
   return problems;
+=======
+function calcHallCapacity(hall) {
+  const ly = hall.layoutConfig || hall["layoutConfig"] || null;
+  const nRows = hall.numbenches || 15;  // rows directly
+  if (ly && ly.columns && ly.columns.length > 0) {
+    const seatsPerRow = ly.columns.reduce((sum, col) => sum + Math.max(1, Math.min(4, col.seats||1)), 0);
+    return nRows * seatsPerRow;
+  }
+  const studentsPerBench = hall.studentsperbench || 3;
+  return nRows * studentsPerBench;
+>>>>>>> origin/main
 }
 
 // Place an ordered list of students into halls starting at startIdx, filling each
@@ -4100,12 +4209,20 @@ function planIntegrityProblems(plan) {
 // - Every enabled constraint is checked on each candidate seat before assignment.
 // - A violating seat is REJECTED and the scan moves to the NEXT physically valid
 //   seat for the SAME student (forward search) — the run never aborts.
+<<<<<<< HEAD
 // - Every side-by-side rule (No Same Department, No Same Year, CAT Bench
 //   Adjacency) uses ONE physical facing-seat model: a seat is constrained only
 //   by its IMMEDIATE neighbour — the slot to the left inside the same bench,
 //   and, for a bench's leftmost slot, the rightmost filled seat of the previous
 //   bench in the same row. Rows are never compared. Same-department (or same
 //   year) adjacent seats are never legal once the rule is active.
+=======
+// - No Same Department is ALSO a department-block/column pattern: consecutive
+//   same-department students (in strict regno order) fill complete vertical
+//   column/bench sequences, spilling into the next column when one fills. Same-dept
+//   side-by-side seats are legal when both belong to the SAME dept block (column
+//   spill); same-dept adjacency between DIFFERENT blocks (scattering) is rejected.
+>>>>>>> origin/main
 // - Only when no seat at all remains does a student become "Unallocated" and get
 //   surfaced for manual placement; later students keep scanning forward.
 function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
@@ -4115,6 +4232,7 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
   let cursor = 0;
   let lastUsedHallIdx = startIdx - 1;
 
+<<<<<<< HEAD
   // Records whether any seat was genuinely rejected by an ACTIVE rule during
   // this whole run. The final "unplaced" reason must blame the rules ONLY when
   // the rules actually rejected a seat; a pure capacity shortage (or an
@@ -4189,33 +4307,68 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
       seatLabel: (ALPHA_SEAT[ci]||String.fromCharCode(65+ci))+(ri+1)+"."+si,
     };
   }
+=======
+  // Department-block ids = maximal runs of the same department in strict regno
+  // order. Assigned ONLY when No Same Department is active; a single block may
+  // spill across adjacent columns (its vertical column/bench sequence) while a
+  // dept must never reappear as a second scattered block.
+  const deptBlockOf = rules.noSameDept
+    ? (function(){
+        const ids = [];
+        let bid = 0;
+        for (let i = 0; i < students.length; i++) {
+          if (i === 0 || ((students[i].dept || "GEN") !== (students[i-1].dept || "GEN"))) {
+            if (i > 0) bid++;
+          }
+          ids.push(bid);
+        }
+        return ids;
+      })()
+    : null;
+  let stopHere = false;
+  // Corrected facing-seat adjacency for CAT bench layouts. When active it
+  // REPLACES the legacy whole-previous-bench comparison below (which would
+  // reject legal checkerboards) rather than stacking on top of it.
+  const benchAdj = benchAdjacencyActive(students, rules);
+>>>>>>> origin/main
 
   function occupiedSeats(hallId, ci, ri) {
     return grid[hallId] ? (grid[hallId][ci+"_"+ri] || []) : [];
   }
 
+<<<<<<< HEAD
   // Per-hall geometry cached from the main scan so the retro-fill pass can re-visit
   // every hall's free seats (and the final per-hall plan entries) after the queue
   // and the neighbouring seats may have changed.
   const hallCtxList = [];
 
+=======
+>>>>>>> origin/main
   for (let hi = startIdx; hi < halls.length; hi++) {
     if (cursor >= students.length) break;
 
     const hall = halls[hi];
     const ly  = hall.layoutConfig || hall["layoutConfig"] || null;
+<<<<<<< HEAD
     const inv = hallSeatInventory(hall);
     const nRows = inv.nRows;
     const colDefs = inv.columns;
     const nCols = colDefs.length;
     const seatsPerCol = colDefs.map(function(c){ return c.seats; });
     const blockedSeatsPerCol = colDefs.map(function(c){ return new Set(c.blocked || []); });
+=======
+    const nRows = hall.numbenches || 15;
+    const nCols = (ly && ly.columns && ly.columns.length > 0) ? ly.columns.length : 3;
+    const colDefs = (ly && ly.columns && ly.columns.length > 0) ? ly.columns : Array(nCols).fill({seats:1});
+    const seatsPerCol = colDefs.map(c => Math.max(1, Math.min(4, c.seats||1)));
+>>>>>>> origin/main
     const takenSeats = hallUsedSeats[hall.id] || new Set();
 
     const benches = [];
     const seats = [];
     const hallGrid = {};
     grid[hall.id] = hallGrid;
+<<<<<<< HEAD
     // Cache the hall's geometry + live seat list for the retro-fill pass and the
     // per-hall empty-seat accounting (both run after the main scan completes).
     hallCtxList.push({
@@ -4232,11 +4385,14 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
     const hallCap = hallUsableCapacity(hall);
     let placedInHall = 0;
     let hallFull = false;
+=======
+>>>>>>> origin/main
 
     // VERTICAL / COLUMN-FIRST traversal, slot-major:
     // For each bench column (A, B, C...), fill slot 1 down ALL rows
     // (A1.1, A2.1, A3.1, A4.1, A5.1), then slot 2 down all rows
     // (A1.2, A2.2, ...A5.2), then slot 3, ... then move to the next bench.
+<<<<<<< HEAD
     // stopHere fires only when ALL students are placed; hallFull fires when this
     // hall's usable capacity is reached and the scan must move to the next hall.
     // Each visited seat is filled with the EARLIEST remaining student that every
@@ -4287,15 +4443,116 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
           if (chosenIdx !== cursor) { students[chosenIdx] = students[cursor]; students[cursor] = st; }
 
           const slot = makeSlot(st, hall, ci, ri, si, benchNo, seatNo);
+=======
+    // stopHere fires only when ALL students are placed.
+    stopHere = false;
+    for (let ci = 0; ci < nCols && !stopHere; ci++) {
+      const nSlots = seatsPerCol[ci] || 1;
+      for (let si = 0; si < nSlots && !stopHere; si++) {
+        for (let ri = 0; ri < nRows && !stopHere; ri++) {
+          const benchNo = ci * nRows + ri + 1;   // column-first bench numbering
+          if (cursor >= students.length) { stopHere = true; break; }   // no more students anywhere
+
+          const seatNo = hall.id + "-B" + benchNo + "S" + (si+1);
+          if (takenSeats.has(seatNo)) continue;          // seat already used by another exam
+
+          const st = students[cursor];
+
+          // Constraint check: EVERY enabled rule vs this candidate seat.
+          //
+          // benchAdjacency (CAT): "side-by-side" means a physically IMMEDIATE
+          // neighbour only — the slot to the left inside this same bench, or the
+          // rightmost filled seat of the previous bench in this row. Rows are
+          // never compared, so A1.1 is not constrained by A2.1.
+          //
+          // Legacy path (unchanged): horizontal side-by-side = previous column,
+          // same row, compared against EVERY seat in that bench. Same-bench
+          // slots and vertical neighbours are not side-by-side.
+          let violations = [];
+          if (benchAdj) {
+            const curDept = (st.dept||"GEN").toUpperCase();
+            // 1. Same bench, one slot to the left.
+            const inBench = occupiedSeats(hall.id, ci, ri);
+            for (const L of inBench) {
+              if (L.slot === si) {
+                if (rules.noSameDept && (L.dept||"GEN").toUpperCase() === curDept) {
+                  violations.push("No Same Department Side-by-Side");
+                }
+                if (rules.noSameYear && String(L.year) === String(st.year)) {
+                  violations.push("No Same Year Side-by-Side");
+                }
+                break;
+              }
+            }
+            // 2. Previous bench in the same row. Only the LEFTMOST slot of this
+            //    bench (si === 0) actually faces the previous bench — B1.2 and
+            //    B1.3 are nowhere near bench A, so comparing them against its
+            //    rightmost seat is exactly the false positive this rule fixes.
+            if (!violations.length && ci > 0 && si === 0) {
+              const facing = benchFacingSeat(occupiedSeats(hall.id, ci-1, ri));
+              if (facing) {
+                if (rules.noSameDept && (facing.dept||"GEN").toUpperCase() === curDept) {
+                  violations.push("No Same Department Side-by-Side");
+                }
+                if (rules.noSameYear && String(facing.year) === String(st.year)) {
+                  violations.push("No Same Year Side-by-Side");
+                }
+              }
+            }
+          } else if (ci > 0) {
+            const leftSeats = occupiedSeats(hall.id, ci-1, ri);
+            for (const L of leftSeats) {
+              if (rules.noSameDept && ((L.dept||"").toUpperCase() === (st.dept||"GEN").toUpperCase())) {
+                // Same-dept adjacency is the department-block/column pattern when
+                // the previous student in strict regno order shares the department
+                // AND both sit inside the SAME dept block (the column spill). It is
+                // rejected only across DIFFERENT blocks (scattered departments).
+                const prev = cursor > 0 ? students[cursor-1] : null;
+                const sameBlock = prev
+                  && (prev.dept||"GEN").toUpperCase() === (st.dept||"GEN").toUpperCase()
+                  && deptBlockOf && deptBlockOf[cursor] === deptBlockOf[cursor-1];
+                if (!sameBlock) { violations.push("No Same Department Side-by-Side"); break; }
+              }
+              if (rules.noSameYear && String(L.year) === String(st.year)) {
+                violations.push("No Same Year Side-by-Side"); break;
+              }
+            }
+          }
+
+          if (violations.length) {
+            // REJECT this seat and search the NEXT physically valid seat for the
+            // SAME student (forward scan). Students are never reordered; earlier
+            // rejected seats simply stay empty. The run never aborts.
+            continue;
+          }
+
+          // Legal seat — assign the student (strict regno order preserved).
+
+          const enrichedDept = st.dept && st.dept !== "GEN"
+            ? st.dept : (inferDeptFromRegno(st.regno) || st.dept || "GEN");
+          const slot = {
+            ...st, dept: enrichedDept,
+            deptBlock: deptBlockOf ? deptBlockOf[cursor] : null,
+            seatNo,
+            hall: hall.name, hallId: hall.id,
+            bench: benchNo, slot: si+1,
+            colIdx: ci, rowIdx: ri,
+            colLabel: ALPHA_SEAT[ci] || String.fromCharCode(65+ci),
+            seatLabel: (ALPHA_SEAT[ci]||String.fromCharCode(65+ci))+(ri+1)+"."+String(si+1),
+          };
+>>>>>>> origin/main
           seats.push(slot);
           if (!hallGrid[ci+"_"+ri]) hallGrid[ci+"_"+ri] = [];
           hallGrid[ci+"_"+ri].push(slot);
           cursor++;
+<<<<<<< HEAD
           placedInHall++;
           // This hall's usable capacity is exhausted: move the scan to the next
           // eligible hall (deterministic first-hall-first) instead of using any
           // remaining physical seats beyond the declared capacity.
           if (placedInHall >= hallCap) hallFull = true;
+=======
+>>>>>>> origin/main
         }
       }
     }
@@ -4309,19 +4566,31 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
         benches.push({
           benchNo: parseInt(bn),
           slots: benchMap[bn].sort(function(a,b){ return a.slot - b.slot; }),
+<<<<<<< HEAD
           capacity: Math.max(0, seatsPerCol[ci] - (blockedSeatsPerCol[ci] ? blockedSeatsPerCol[ci].size : 0)),
+=======
+          capacity: seatsPerCol[ci] || 1,
+>>>>>>> origin/main
         });
       });
     }
 
     if (seats.length) {
+<<<<<<< HEAD
       const totalSeatsPerRow = hallSeatSlotsPerRow(inv);
+=======
+      const totalSeatsPerRow = seatsPerCol.reduce((a,b) => a + b, 0);
+>>>>>>> origin/main
       plan[hall.id] = {
         hallName:         hall.name,
         numbenches:       nRows,
         studentsperbench: totalSeatsPerRow,
         layoutConfig:     ly,
+<<<<<<< HEAD
         nCols: nCols, nRows: nRows, capacity: hallUsableCapacity(hall),
+=======
+        nCols: nCols, nRows: nRows, capacity: nRows * totalSeatsPerRow,
+>>>>>>> origin/main
         benches: benches, seats: seats,
       };
       lastUsedHallIdx = hi;
@@ -4330,6 +4599,7 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
     if (stopHere) break;
   }
 
+<<<<<<< HEAD
   // ── RETRO-FILL PASS (hall utilization) ─────────────────────────────────────
   // The main scan leaves a seat EMPTY when, at the moment that seat was visited,
   // no remaining student was legal there. Filling LATER seats can change a
@@ -4432,12 +4702,22 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
     const reason = anyRuleRejected
       ? "No legal seat satisfies the active rules (No Same Department / No Same Year Side-by-Side) — manual placement required"
       : "Hall capacity exhausted (eligible halls have no remaining seat for this student)";
+=======
+  // No halls left but students remain → surface them for manual placement
+  // instead of silently dropping them. (When stopHere fired, every student was
+  // consumed, so nothing remains to record.)
+  if (!stopHere && cursor < students.length) {
+    const reason = (rules.noSameDept || rules.noSameYear)
+      ? "No legal seat satisfies the active rules (No Same Department / No Same Year Side-by-Side) — manual placement required"
+      : "Hall capacity exhausted";
+>>>>>>> origin/main
     const lastHall = halls.length ? halls[halls.length - 1] : null;
     for (let u = cursor; u < students.length; u++) {
       unplaced.push({ student: students[u], reason: reason, hallName: lastHall ? lastHall.name : "" });
     }
   }
 
+<<<<<<< HEAD
   // ── Per-hall empty-seat accounting ─────────────────────────────────────────
   // Why every seat that is still free stayed free — reported for the UI, never
   // written into the saved plan. `reserved` counts seats physically occupied by a
@@ -4475,6 +4755,9 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
   }
 
   return { plan, unplaced, lastUsedHallIdx, hallEmptySeats };
+=======
+  return { plan, unplaced, lastUsedHallIdx };
+>>>>>>> origin/main
 }
 
 // validatePlan: checks the complete arrangement against every selected rule and
@@ -4483,6 +4766,7 @@ function validatePlan(plan, rules) {
   const problems = [];
   const seenRegnos = new Set();
   const seenSeatNos = new Set();
+<<<<<<< HEAD
   const seenIds = new Set();
 
   // The single authoritative adjacency gate, mirroring the allocator: any
@@ -4510,10 +4794,29 @@ function validatePlan(plan, rules) {
     const ik = s.id != null ? String(s.id).trim() : "";
     if (ik && seenIds.has(ik)) problems.push("Duplicate student record " + s.id + " assigned twice in " + hallName);
     if (ik) seenIds.add(ik);
+=======
+  const benchAdj = !!rules.benchAdjacency;
+
+  function addSeatSeen(s, hallName) {
+    if (seenRegnos.has(s.regno)) problems.push("Duplicate student " + s.regno + " assigned twice in " + hallName);
+    seenRegnos.add(s.regno);
+>>>>>>> origin/main
     if (seenSeatNos.has(s.seatNo)) problems.push("Duplicate seat " + s.seatNo + " in " + hallName);
     seenSeatNos.add(s.seatNo);
   }
 
+<<<<<<< HEAD
+=======
+  // benchAdjacency only bites when a hall actually mixes departments, so a
+  // single-department exam never raises a false violation.
+  function adjActive(seats) {
+    if (!benchAdj) return false;
+    const seen = new Set();
+    for (const s of (seats||[])) seen.add(((s && s.dept) || "GEN").toUpperCase());
+    return seen.size >= 2;
+  }
+
+>>>>>>> origin/main
   Object.values(plan).forEach(hp => {
     const hallName = hp.hallName || "";
     const grid = {};
@@ -4524,6 +4827,7 @@ function validatePlan(plan, rules) {
       grid[key].push(s);
     });
 
+<<<<<<< HEAD
     const declCols = (hp.layoutConfig && hp.layoutConfig.columns) || null;
     const benchWidth = function (ci, ri) {
       if (declCols) {
@@ -4553,6 +4857,53 @@ function validatePlan(plan, rules) {
       }
       if (yearRuleUsable && rules.noSameYear && String(left.year) === String(s.year)) {
         problems.push("Year adjacency violation: " + s.regno + " & " + left.regno + " side-by-side in " + hallName + " (" + left.seatNo + " / " + s.seatNo + ")");
+=======
+    // benchAdjacency (CAT): the slot immediately to the left in the SAME bench,
+    // plus the rightmost filled seat of the PREVIOUS bench in the same row — but
+    // only for this bench's leftmost slot. Rows are never compared.
+    //
+    // When the flag is set the legacy whole-previous-bench comparison is NOT used
+    // as a fallback: on a single-department hall, where the rule switches itself
+    // off as unsatisfiable, falling back would re-introduce exactly the
+    // over-strict comparison this model exists to replace.
+    if (benchAdj) {
+      if (!adjActive(hp.seats)) return;
+      (hp.seats || []).forEach(s => {
+        const ci = s.colIdx ?? 0, ri = s.rowIdx ?? 0, si = s.slot ?? 0;
+        let left = null;
+        for (const L of (grid[ci + "_" + ri] || [])) if (L.slot === si - 1) { left = L; break; }
+        // Only the leftmost slot of a bench faces the previous bench.
+        if (!left && ci > 0 && si === 1) left = benchFacingSeat(grid[(ci-1) + "_" + ri] || []);
+        if (!left) return;
+        if (rules.noSameDept && ((left.dept||"GEN").toUpperCase() === (s.dept||"GEN").toUpperCase())) {
+          problems.push("Department adjacency violation: " + s.regno + " & " + left.regno + " side-by-side in " + hallName + " (" + left.seatNo + " / " + s.seatNo + ")");
+        }
+        if (rules.noSameYear && String(left.year) === String(s.year)) {
+          problems.push("Year adjacency violation: " + s.regno + " & " + left.regno + " side-by-side in " + hallName + " (" + left.seatNo + " / " + s.seatNo + ")");
+        }
+      });
+      return;
+    }
+
+    // Horizontal side-by-side validation (previous column, same row)
+    (hp.seats || []).forEach(s => {
+      const ci = s.colIdx ?? 0, ri = s.rowIdx ?? 0;
+      if (ci <= 0) return;
+      const leftSeats = grid[(ci-1) + "_" + ri] || [];
+      for (const L of leftSeats) {
+        if (rules.noSameDept && ((L.dept||"").toUpperCase() === (s.dept||"GEN").toUpperCase())) {
+          // Department-block pattern: same-dept adjacency validates when both
+          // seats carry the SAME deptBlock id (a single department block spilling
+          // across columns). Legacy/manual seats carry no deptBlock, so scattered
+          // same-dept side-by-side is still flagged for manual confirmation.
+          if (!(L.deptBlock !== undefined && L.deptBlock !== null && s.deptBlock === L.deptBlock)) {
+            problems.push("Department adjacency violation: " + s.regno + " & " + L.regno + " side-by-side in " + hallName + " (" + L.seatNo + " / " + s.seatNo + ")");
+          }
+        }
+        if (rules.noSameYear && String(L.year) === String(s.year)) {
+          problems.push("Year adjacency violation: " + s.regno + " & " + L.regno + " side-by-side in " + hallName + " (" + L.seatNo + " / " + s.seatNo + ")");
+        }
+>>>>>>> origin/main
       }
     });
   });
@@ -4606,6 +4957,7 @@ function buildSeatingReport(plan, allStudents, rules, unplaced, hallUsedSeats) {
 }
 
 // Entry point used by the main AdminDashboard Generate Seating flow.
+<<<<<<< HEAD
 // Interleave departments round-robin across an already regno-sorted roster.
 // Used only when a same-department rule (No Same Department / bench adjacency) is
 // ACTIVE and the pool holds ≥2 departments: with register numbers usually
@@ -4661,6 +5013,8 @@ function interleaveByDepartment(students, rules) {
   return out;
 }
 
+=======
+>>>>>>> origin/main
 // Keeps the call signature generateSmartSeating(groups, halls, hallUsedSeats)
 // and returns a compat `plan` object. Supplementary data (unplaced + report) is
 // exposed on window.__lastSeatingResult for the caller.
@@ -4675,6 +5029,7 @@ function generateSmartSeating(groups, halls, hallUsedSeats) {
     g.students.map(s => ({ ...s, groupLabel: g.label||"" }))
   );
   if (!allStudents.length) return {};
+<<<<<<< HEAD
   const seenIds = new Set();
   const seenRegs = new Set();
   let dupesRemoved = 0;
@@ -4686,11 +5041,19 @@ function generateSmartSeating(groups, halls, hallUsedSeats) {
     if (idk) seenIds.add(idk);
     if (rk) seenRegs.add(rk);
     return true;
+=======
+  const seen = new Set();
+  allStudents = allStudents.filter(s => {
+    const k = s.id || s.regno;
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+>>>>>>> origin/main
   });
 
   // 2. Strict register-number sort — the ONLY reordering permitted.
   allStudents.sort(byRegNo);
 
+<<<<<<< HEAD
   // 2b. Department interleave. With a same-department rule active and ≥2
   //     departments in the pool, departments are rotated round-robin (balanced)
   //     so no department ever arrives in a run and the seat rule does not have
@@ -4704,6 +5067,10 @@ function generateSmartSeating(groups, halls, hallUsedSeats) {
   // gender block owns disjoint halls, so these never double-count a hall).
   const blockEmptySeats = [];
   const collectEmpty = function (r) { if (r && Array.isArray(r.hallEmptySeats) && r.hallEmptySeats.length) blockEmptySeats.push.apply(blockEmptySeats, r.hallEmptySeats); };
+=======
+  const plan = {};
+  const unplaced = [];
+>>>>>>> origin/main
 
   if (rules.splitGender) {
     // 3a. Three-way gender partition, each list already in strict regno order
@@ -4727,7 +5094,10 @@ function generateSmartSeating(groups, halls, hallUsedSeats) {
     let lastHall = -1;
     if (maleGroup.length) {
       const maleRes = placeStudentsInHalls(maleGroup, halls, 0, hallUsedSeats, rules);
+<<<<<<< HEAD
       collectEmpty(maleRes);
+=======
+>>>>>>> origin/main
       Object.assign(plan, maleRes.plan);
       unplaced.push(...maleRes.unplaced);
       lastHall = maleRes.lastUsedHallIdx;
@@ -4739,7 +5109,10 @@ function generateSmartSeating(groups, halls, hallUsedSeats) {
     if (femaleGroup.length) {
       const femaleStart = lastHall + 1;
       const femaleRes = placeStudentsInHalls(femaleGroup, halls, femaleStart, hallUsedSeats, rules);
+<<<<<<< HEAD
       collectEmpty(femaleRes);
+=======
+>>>>>>> origin/main
       Object.assign(plan, femaleRes.plan);
       unplaced.push(...femaleRes.unplaced);
       lastHall = femaleRes.lastUsedHallIdx;
@@ -4750,19 +5123,26 @@ function generateSmartSeating(groups, halls, hallUsedSeats) {
     if (otherGroup.length) {
       const otherStart = lastHall + 1;
       const otherRes = placeStudentsInHalls(otherGroup, halls, otherStart, hallUsedSeats, rules);
+<<<<<<< HEAD
       collectEmpty(otherRes);
+=======
+>>>>>>> origin/main
       Object.assign(plan, otherRes.plan);
       unplaced.push(...otherRes.unplaced);
     }
   } else {
     // No gender split: place everyone in strict regno order across all halls.
     const res = placeStudentsInHalls(allStudents, halls, 0, hallUsedSeats, rules);
+<<<<<<< HEAD
     collectEmpty(res);
+=======
+>>>>>>> origin/main
     Object.assign(plan, res.plan);
     unplaced.push(...res.unplaced);
   }
 
   const report = buildSeatingReport(plan, allStudents, rules, unplaced, hallUsedSeats);
+<<<<<<< HEAD
   report.dupesRemoved = dupesRemoved;
   // Why free seats stayed free (never part of the saved plan — the UI renders this
   // from the generation result, and the plan itself stays byte-identical to what
@@ -5373,17 +5753,26 @@ async function runBulkSeating(cfg) {
   return { results: results, summary: summary, plansById: plansById };
 }
 
+=======
+  window.__lastSeatingResult = { plan, unplaced, report, rules };
+  return plan;
+}
+
+>>>>>>> origin/main
 // Warnings from the most recent parseCSV() call (invalid rows skipped on import).
 let CSV_LAST_WARNINGS = [];
 function takeCSVWarnings() { const w = CSV_LAST_WARNINGS || []; CSV_LAST_WARNINGS = []; return w; }
 window.takeCSVWarnings = takeCSVWarnings;
 
+<<<<<<< HEAD
 // Marks an exam whose most recent seating generation did NOT complete while an
 // older saved plan still exists, so screens can say plainly "this is the OLD
 // plan — nothing was replaced" instead of implying the visible seating is fresh.
 let lastSeatingGenFailure = null;
 window.lastSeatingGenFailure = lastSeatingGenFailure;
 
+=======
+>>>>>>> origin/main
 async function parseCSV(text) {
   // Handle both simple CSV and tab-separated values
   let lines = text.trim().split(/\r?\n/);
@@ -6664,7 +7053,11 @@ function LoginScreen({ onLogin, onRegister }) {
 }
 
 // ── ADMIN DASHBOARD ───────────────────────────────────────────────────────────
+<<<<<<< HEAD
 function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls, exams, setExams, seatingPlans, setSeatingPlans, seatingPlansLoadWarning, pendingRegs, queueLive, queueErr, onRetryQueue, onConfirmGroup, onRejectGroup }) {
+=======
+function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls, exams, setExams, seatingPlans, setSeatingPlans, pendingRegs, queueLive, queueErr, onRetryQueue, onConfirmGroup, onRejectGroup }) {
+>>>>>>> origin/main
   const college = user && user.college ? user.college : ACTIVE_COLLEGE;
   const [subjects,setSubjects]=useState(college?.subjects||[]);
   // ACTIVE_COLLEGE is already set in App.handleLogin before data loads
@@ -6780,6 +7173,7 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
 
     // Remove duplicate students across groups (same student in multiple groups)
     const seenIds = new Set();
+<<<<<<< HEAD
     const seenRegs = new Set();
     groups = groups.map(g => ({
       ...g,
@@ -6790,6 +7184,13 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
         if (idk) seenIds.add(idk);
         if (rk && seenRegs.has(rk)) return false;
         if (rk) seenRegs.add(rk);
+=======
+    groups = groups.map(g => ({
+      ...g,
+      students: g.students.filter(s => {
+        if (seenIds.has(s.id || s.regno)) return false;
+        seenIds.add(s.id || s.regno);
+>>>>>>> origin/main
         return true;
       })
     })).filter(g => g.students.length > 0);
@@ -6802,6 +7203,7 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
     const totalStudents = groups.reduce((a,g) => a+g.students.length, 0);
 
     // ── HALL CONFLICT CHECK: same date/session cannot reuse the same hall ─
+<<<<<<< HEAD
     // Built from CANONICAL hall ids (record ids, names, aliases and legacy plan
     // keys all collapse to one) and a canonicalised date/session, so cosmetic
     // date variants can never hide a real conflict and an alias-keyed saved plan
@@ -6829,6 +7231,32 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
         const conflictNames = halls.filter(h => conflictingIds.has(String(h.id))).map(h => h.name).join(", ");
         showToast(`Hall conflict: ${conflictNames} already assigned to another ${exam.session} exam on ${exam.date}.`, "error");
         if (seatingPlans[exam.id]) lastSeatingGenFailure = { exam, at: Date.now() };
+=======
+    const busyHallIds = new Set();
+    const sameSessionExams = exams.filter(e =>
+      e.id !== exam.id &&
+      e.date === exam.date &&
+      e.session === exam.session
+    );
+    for (const otherExam of sameSessionExams) {
+      // If exam has explicit hall assignments, mark those halls as busy
+      if (otherExam.hallids?.length) {
+        otherExam.hallids.forEach(hid => busyHallIds.add(hid));
+      }
+      // Also check seating plans for any hall usage (including auto-selected)
+      let otherPlan = seatingPlans[otherExam.id];
+      if (!otherPlan) {
+        try { otherPlan = await Store.getSeatingPlan(otherExam.id); } catch (_) { }
+      }
+      if (otherPlan) Object.keys(otherPlan).forEach(hid => busyHallIds.add(hid));
+    }
+
+    if (exam.hallids?.length) {
+      const conflicting = exam.hallids.filter(id => busyHallIds.has(id));
+      if (conflicting.length) {
+        const conflictNames = halls.filter(h => conflicting.includes(h.id)).map(h => h.name).join(", ");
+        showToast(`Hall conflict: ${conflictNames} already assigned to another ${exam.session} exam on ${exam.date}.`, "error");
+>>>>>>> origin/main
         setGenerating(false); setConfirmExam(null); setRegenDiff(null);
         return;
       }
@@ -6837,8 +7265,13 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
     // ── AUTO-SELECT HALLS: use exam halls OR auto-pick enough halls ─
     // Sort halls by capacity descending so largest fills first
     let examHalls = exam.hallids?.length
+<<<<<<< HEAD
       ? halls.filter(h => exam.hallids.some(hid => hallByIdOrName(hid, [h]) != null))
       : [...halls].filter(h => !busyHallIds.has(String(h.id)) && examHallTypePool(exam).indexOf((h.hallType || "University")) >= 0).sort((a,b) => calcHallCapacity(b) - calcHallCapacity(a));
+=======
+      ? halls.filter(h => exam.hallids.includes(h.id))
+      : [...halls].filter(h => !busyHallIds.has(h.id) && (h.hallType || "University") === exam.subject).sort((a,b) => calcHallCapacity(b) - calcHallCapacity(a));
+>>>>>>> origin/main
 
     // Auto-calculate: pick halls until total capacity >= total students
     // ONLY if no explicit halls were selected
@@ -6860,7 +7293,10 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
 
     if (!examHalls.length) {
       showToast("Hall allocation failed: no available halls found for this date/session. All halls are already assigned to another exam.", "error");
+<<<<<<< HEAD
       if (seatingPlans[exam.id]) lastSeatingGenFailure = { exam, at: Date.now() };
+=======
+>>>>>>> origin/main
       setGenerating(false); setConfirmExam(null); setRegenDiff(null);
       return;
     }
@@ -6892,6 +7328,7 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
     }];
 
     try {
+<<<<<<< HEAD
       // hallUsedSeats was built canonically (alias-keyed plans included) by
       // examReservationData; the same Set<seatNo> mapping drives seat-level
       // conflict resolution inside the allocator.
@@ -6901,6 +7338,28 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
       // each hall to its usable capacity before the next, and back-fills every
       // seat with the earliest eligible student — handing over ONLY genuinely
       // unallocatable students;
+=======
+      // Build hallUsedSeats map from same-session exams for seat-level conflict resolution
+      const hallUsedSeats = {};
+      for (const otherExam of sameSessionExams) {
+        let otherPlan = seatingPlans[otherExam.id];
+        if (!otherPlan) {
+          try { otherPlan = await Store.getSeatingPlan(otherExam.id); } catch (_) { }
+        }
+        if (otherPlan) {
+          Object.entries(otherPlan).forEach(([hid, hp]) => {
+            if (!hallUsedSeats[hid]) hallUsedSeats[hid] = new Set();
+            (hp.seats || []).forEach(s => {
+              if (s.seatNo) hallUsedSeats[hid].add(s.seatNo);
+            });
+          });
+        }
+      }
+      const plan = generateSmartSeating(groups, examHalls, hallUsedSeats);
+      // New-method output: the auto-engine places every student in strict regno
+      // order (department-block/column pattern, forward-scan fallback) and hands
+      // over ONLY genuinely unallocatable students;
+>>>>>>> origin/main
       // window.__lastSeatingResult carries { plan, unplaced, report, rules }.
       const __sr = window.__lastSeatingResult || { plan: plan || {}, unplaced: [], report: null, rules };
       const unplaced = __sr.unplaced || [];
@@ -6908,23 +7367,34 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
       // ── §13: if ANY student couldn't be placed, DO NOT save. Hand off to
       //    manual placement. We never save a partial/rule-broken plan silently.
       if (unplaced.length > 0) {
+<<<<<<< HEAD
         const imp = adjacencyImpossibility(groups.flatMap(g => g.students), rules);
         if (imp.noSameDept) showToast(unplaced.length + " student(s) couldn't be placed automatically. Note: the No Same Department rule cannot be enforced for this single-department exam — decide whether to turn it off. Manual placement required before saving.", "warn");
         else showToast(unplaced.length + " student(s) couldn't be placed automatically. Manual placement required before saving.", "warn");
         if (seatingPlans[exam.id]) lastSeatingGenFailure = { exam, at: Date.now() };
+=======
+>>>>>>> origin/main
         setPendingGen({ exam, plan: __sr.plan || {}, unplaced, hallUsedSeats, rules: { ...rules }, carryForward, unallocated });
         setValidationReport(__sr.report);
         setManualIdx(0); setManualSel(null);
         setConfirmExam(null); setRegenDiff(null);
+<<<<<<< HEAD
+=======
+        showToast(unplaced.length + " student(s) couldn't be placed automatically. Manual placement required before saving.", "warn");
+>>>>>>> origin/main
         return;
       }
 
       // ── §21: VALIDATE BEFORE SAVING — never persist a violating plan.
       const problems = validatePlan(plan, rules);
       if (rules.splitGender) problems.push(...validateGenderSeparation(plan));
+<<<<<<< HEAD
       problems.push.apply(problems, planIntegrityProblems(plan));
       if (problems.length > 0) {
         if (seatingPlans[exam.id]) lastSeatingGenFailure = { exam, at: Date.now() };
+=======
+      if (problems.length > 0) {
+>>>>>>> origin/main
         setValidationReport({ totalStudents: totalStudents, assigned: 0, unassigned: 0, male: 0, female: 0, hallsUsed: 0, emptySeats: 0, selectedRules: [], validationOk: false, validation: problems, unplaced: [] });
         showToast("Validation failed — plan NOT saved: " + problems[0], "error");
         setConfirmExam(null); setRegenDiff(null);
@@ -6938,7 +7408,10 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
       const _planConflicts = findPlanHallSessionConflicts(exam.id, plan, exams, seatingPlans, halls);
       if (_planConflicts.length > 0) {
         console.warn("[HN-DEBUG] plan-save-blocked", { examId: exam.id, conflicts: _planConflicts });
+<<<<<<< HEAD
         if (seatingPlans[exam.id]) lastSeatingGenFailure = { exam, at: Date.now() };
+=======
+>>>>>>> origin/main
         window.alert("Seating plan NOT saved — seat clash with an existing plan:\n\n" + describePlanConflicts(_planConflicts) +
           "\n\nAnother seating plan already occupies these physical seats in the same hall/date/session. " +
           "Re-use that plan (add the new exam's students to it) or pick a different hall/session. " +
@@ -6949,7 +7422,10 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
 
       await Store.setSeatingPlan(exam.id, plan);
       await Store.updateExam(exam.id, {seatinggenerated:true, carryForward:carryForward, unallocatedSeats:unallocated});
+<<<<<<< HEAD
       if (lastSeatingGenFailure && lastSeatingGenFailure.exam && lastSeatingGenFailure.exam.id === exam.id) lastSeatingGenFailure = null;
+=======
+>>>>>>> origin/main
       setSeatingPlans(prev=>({...prev,[exam.id]:plan}));
       setExams(prev=>prev.map(e=>e.id===exam.id?{...e,seatinggenerated:true, carryForward:carryForward, unallocatedSeats:unallocated}:e));
       setValidationReport(__sr.report || { totalStudents: totalStudents, assigned: 0, unassigned: 0, male: 0, female: 0, hallsUsed: 0, emptySeats: 0, selectedRules: [], validationOk: true, validation: [], unplaced: [] });
@@ -6972,8 +7448,12 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
           // Always load from DB to catch plans saved in previous sessions
           let existingPlan = seatingPlans[e2.id];
           if (!existingPlan) {
+<<<<<<< HEAD
             try { existingPlan = await Store.getSeatingPlan(e2.id); }
             catch(_e) { dupeWarnings.push(e2.subject + ": could not read its saved plan to verify duplicates (read failed)."); continue; }
+=======
+            try { existingPlan = await Store.getSeatingPlan(e2.id); } catch(_) {}
+>>>>>>> origin/main
           }
           if (existingPlan) {
             const existing = Object.values(existingPlan).flatMap(h=>(h.seats||[]).map(s=>s.regno));
@@ -7201,17 +7681,28 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
     const inventory = {};
     selectedHalls.forEach(hall => {
       const hp = plan[hall.id];
+<<<<<<< HEAD
       const inv = hallSeatInventory(hall);
       const nRows = inv.nRows;
       const nCols = inv.columns.length;
       const seatsPerCol = inv.columns.map(c=>c.seats);
       const blockedPerCol = inv.columns.map(c=>new Set(c.blocked||[]));
+=======
+      const ly = hall.layoutConfig || (hp && hp.layoutConfig) || null;
+      const nRows = hall.numbenches || (hp && hp.nRows) || 15;
+      const nCols = (ly && ly.columns && ly.columns.length)
+        ? ly.columns.length : ((hp && hp.nCols) || 3);
+      const seatsPerCol = (ly && ly.columns && ly.columns.length)
+        ? ly.columns.map(c=>Math.max(1,Math.min(4,c.seats||1)))
+        : Array(nCols).fill(1);
+>>>>>>> origin/main
       const used = new Set((plan[hall.id]?.seats||[]).map(s=>s.seatNo));
       (hallUsedSeats[hall.id]||new Set()).forEach(s=>used.add(s));
       const seats = [];
       for (let ci=0; ci<nCols; ci++) for (let ri=0; ri<nRows; ri++) {
         const benchNo = ci*nRows + ri + 1;
         const nSlots = seatsPerCol[ci]||1;
+<<<<<<< HEAD
         const bset = blockedPerCol[ci];
         for (let si=1; si<=nSlots; si++) {
           if (bset.has(si-1)) continue;
@@ -7222,6 +7713,16 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
             colIdx: ci, rowIdx: ri,
             colLabel: ALPHA_SEAT[ci]||String.fromCharCode(65+ci),
             seatLabel: (ALPHA_SEAT[ci]||String.fromCharCode(65+ci))+(ri+1)+"."+si,
+=======
+        for (let si=0; si<nSlots; si++) {
+          const seatNo = hall.id + "-B" + benchNo + "S" + (si+1);
+          if (used.has(seatNo)) continue;
+          seats.push({
+            hallId: hall.id, hallName: hall.name, seatNo, bench: benchNo, slot: si+1,
+            colIdx: ci, rowIdx: ri,
+            colLabel: ALPHA_SEAT[ci]||String.fromCharCode(65+ci),
+            seatLabel: (ALPHA_SEAT[ci]||String.fromCharCode(65+ci))+(ri+1)+"."+String(si+1),
+>>>>>>> origin/main
           });
         }
       }
@@ -7242,6 +7743,7 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
       const v = [];
       const hp = plan[s.hallId];
       if (!hp || !hp.seats || hp.seats.length === 0) return v;
+<<<<<<< HEAD
       // The same physical facing-seat model drives manual placement, so a
       // hand-placed student is warned against exactly the adjacency the
       // allocator enforces and the validator blocks at save time.
@@ -7267,12 +7769,40 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
         if (_yearOn && rules.noSameYear && String(left.year) === String(student.year))
           v.push("No Same Year Side-by-Side");
       }
+=======
+      if (rules.benchAdjacency && benchAdjacencyActive((hp.seats||[]).concat([student]), rules)) {
+        let left = null;
+        for (const x of hp.seats) {
+          if (x.colIdx === s.colIdx && x.rowIdx === s.rowIdx && x.slot === s.slot - 1) { left = x; break; }
+        }
+        if (!left && s.colIdx > 0 && s.slot === 1) {
+          const prev = hp.seats.filter(x => x.colIdx === s.colIdx - 1 && x.rowIdx === s.rowIdx);
+          left = benchFacingSeat(prev);
+        }
+        if (left) {
+          if (rules.noSameDept && ((left.dept||"GEN").toUpperCase() === (student.dept||"GEN").toUpperCase()))
+            v.push("No Same Department Side-by-Side");
+          if (rules.noSameYear && String(left.year) === String(student.year))
+            v.push("No Same Year Side-by-Side");
+        }
+        return [...new Set(v)];
+      }
+      if (s.colIdx === 0) return v;
+      const left = (hp.seats||[]).filter(x => x.colIdx === s.colIdx-1 && x.rowIdx === s.rowIdx);
+      left.forEach(L => {
+        if (rules.noSameDept && ((L.dept||"").toUpperCase() === (student.dept||"GEN").toUpperCase()))
+          v.push("No Same Department Side-by-Side");
+        if (rules.noSameYear && String(L.year) === String(student.year))
+          v.push("No Same Year Side-by-Side");
+      });
+>>>>>>> origin/main
       return [...new Set(v)];
     }
 
     function placeHere(s) {
       const violations = seatViolations(s);
       if (violations.length) {
+<<<<<<< HEAD
         showToast("Placement refused — " + violations.join(", ") + ". An enabled mandatory seating rule cannot be overridden manually. Pick a legal seat (or leave this student unplaced).", "error");
         return;
       }
@@ -7295,6 +7825,23 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
         hp = { hallName: hallMeta.name, numbenches: _nRows, nCols: _inv.columns.length, nRows: _nRows,
                studentsperbench: _row, capacity: hallUsableCapacity(hallMeta),
                layoutConfig: hallMeta.layoutConfig || null, benches: [], seats: [] };
+=======
+        const ok = window.confirm("⚠ This seat violates: " + violations.join(", ") + ".\n\nPlace here anyway (manual override)?");
+        showToast(ok ? "Placed manually (rule warning overridden)." : "Placement cancelled.", "warn");
+        if (!ok) return;
+      }
+      const hallMeta = halls.find(h => h.id === s.hallId) || { name: s.hallName, numbenches: 15, layoutConfig: null };
+      let hp = plan[s.hallId];
+      if (!hp) {
+        const _ly = hallMeta.layoutConfig || null;
+        const _nRows = hallMeta.numbenches || 15;
+        const _nCols = (_ly && _ly.columns && _ly.columns.length) ? _ly.columns.length : 3;
+        const _seatsPerCol = (_ly && _ly.columns && _ly.columns.length)
+          ? _ly.columns.map(c=>Math.max(1,Math.min(4,c.seats||1))) : Array(_nCols).fill(1);
+        hp = { hallName: hallMeta.name, numbenches: _nRows, nCols: _nCols, nRows: _nRows,
+               studentsperbench: _seatsPerCol.reduce((a,b)=>a+b,0), capacity: _nRows * _seatsPerCol.reduce((a,b)=>a+b,0),
+               layoutConfig: _ly, benches: [], seats: [] };
+>>>>>>> origin/main
       }
       const slot = {
         ...student, dept: (student.dept||"GEN"), seatNo: s.seatNo,
@@ -7312,6 +7859,7 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
       addAuditEntry("Manual Seat Placement", `${student.regno} → ${s.seatNo} (${s.hallName})`);
       setPendingGen({ ...pendingGen, plan: { ...plan, [s.hallId]: hp } });
       setManualIdx(manualIdx + 1); setManualSel(null);
+<<<<<<< HEAD
       showToast(`Seated ${student.regno} at ${s.seatLabel}.`, "success");
     }
 
@@ -7342,6 +7890,26 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
           (problems.length > 3 ? "\n… and " + (problems.length - 3) + " more" : "") +
           "\n\nFix the issues before saving. No data was changed.");
         return;
+=======
+      showToast(violations.length ? "Placed manually (rule overridden)." : `Seated ${student.regno} at ${s.seatLabel}.`, "success");
+    }
+
+    async function saveManualPlan() {
+      let problems = validatePlan(plan, rules);
+      if (rules.splitGender) problems = [...problems, ...validateGenderSeparation(plan)];
+      if (problems.length > 0) {
+        // Manual placements may intentionally override rules: placeHere already
+        // asked for confirmation when a rule-violating seat was chosen. If any
+        // issue remains, ask ONCE more at save time and let the admin decide —
+        // otherwise a rule overridden during manual placement could never be saved.
+        const ok = window.confirm(
+          "⚠ This plan has " + problems.length + " unresolved issue(s):\n\n" +
+          problems.slice(0, 3).join("\n") +
+          (problems.length > 3 ? "\n… and " + (problems.length - 3) + " more" : "") +
+          "\n\nSave this plan anyway (manual override)?"
+        );
+        if (!ok) { showToast("Plan not saved. Fix the issues or override to save.", "warn"); return; }
+>>>>>>> origin/main
       }
       try {
         // Block-and-warn: refuse to save a plan that claims a physical seat already
@@ -7359,7 +7927,10 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
         const unalloc = Math.max(0, unplaced.length - Math.min(manualIdx, unplaced.length));
         await Store.setSeatingPlan(exam.id, plan);
         await Store.updateExam(exam.id, {seatinggenerated:true, carryForward:pendingGen.carryForward, unallocatedSeats:unalloc});
+<<<<<<< HEAD
         if (lastSeatingGenFailure && lastSeatingGenFailure.exam && lastSeatingGenFailure.exam.id === exam.id) lastSeatingGenFailure = null;
+=======
+>>>>>>> origin/main
         setSeatingPlans(prev=>({...prev,[exam.id]:plan}));
         setExams(prev=>prev.map(e=>e.id===exam.id?{...e,seatinggenerated:true}:e));
         addAuditEntry("Seating Generated (Manual)", `${exam.subject} / ${exam.date} / ${exam.session} / ${Object.values(plan).reduce((a,h)=>a+h.seats.length,0)} seats`);
@@ -7376,11 +7947,16 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
           <div className="p-6 border-b border-gray-100" style={{background:"linear-gradient(135deg,#7c2d12,#431407)"}}>
             <div className="flex items-center justify-between">
               <div>
+<<<<<<< HEAD
 <div className="text-white font-black text-base">Manual Placement Required</div>
               <div className="text-amber-200 text-xs mt-0.5">{exam.subject} · {exam.date} · {exam.session}</div>
               {seatingPlans && seatingPlans[exam.id] && (
                 <div className="mt-1 text-amber-100 text-[11px] font-bold">Previous saved plan preserved — nothing is replaced until this new plan is saved (or you cancel).</div>
               )}
+=======
+                <div className="text-white font-black text-base">Manual Placement Required</div>
+                <div className="text-amber-200 text-xs mt-0.5">{exam.subject} · {exam.date} · {exam.session}</div>
+>>>>>>> origin/main
               </div>
               <div className="bg-amber-500/30 text-amber-100 text-xs font-bold px-3 py-1.5 rounded-xl">
                 {unplaced.length - Math.min(manualIdx, unplaced.length)} remaining · {freeSeatsTotal} seats free
@@ -7575,7 +8151,11 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
             {page==="studentinfo"&&<StudentDetailsPage students={students} exams={exams} seatingPlans={seatingPlans} halls={halls}/>}
             {page==="upload"     &&<UploadPage students={students} setStudents={setStudents} showToast={showToast}/>}
             {page==="halls"      &&<HallsPage halls={halls} setHalls={setHalls} showToast={showToast}/>}
+<<<<<<< HEAD
             {page==="exams"      &&<ExamsPage exams={exams} setExams={setExams} halls={halls} students={students} setStudents={setStudents} subjects={subjects} setSubjects={setSubjects} showToast={showToast} onGenerate={handleGenerateSeating} seatingPlans={seatingPlans} setSeatingPlans={setSeatingPlans} seatingPlansLoadWarning={seatingPlansLoadWarning} college={college}/>}
+=======
+            {page==="exams"      &&<ExamsPage exams={exams} setExams={setExams} halls={halls} students={students} setStudents={setStudents} subjects={subjects} setSubjects={setSubjects} showToast={showToast} onGenerate={handleGenerateSeating} seatingPlans={seatingPlans} setSeatingPlans={setSeatingPlans} college={college}/>}
+>>>>>>> origin/main
             {page==="subjects"   &&<SubjectsPage subjects={subjects} setSubjects={setSubjects} showToast={showToast}/>}
             {page==="seating"    &&<SeatingPage exams={exams} seatingPlans={seatingPlans} students={students} subjects={subjects} halls={halls}/>}
             {page==="hallnotice" &&<HallNoticePage halls={halls} seatingPlans={seatingPlans} exams={exams} students={students} college={college} showToast={showToast}/>}
@@ -7934,7 +8514,11 @@ Press OK to confirm.`)) return;
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         {[
           {label:"Students",     val:students.length,                              grad:"from-blue-500 to-blue-600",    sub:maleCount+"M / "+femaleCount+"F"},
+<<<<<<< HEAD
           {label:"Exam Halls",   val:halls.length,                                 grad:"from-violet-500 to-purple-600", sub:(function(){const t={};halls.forEach(h=>{const k=h.hallType||"University";t[k]=(t[k]||0)+1});return Object.entries(t).map(([k,v])=>k+" "+v).join(" · ")||"0"})()+" · "+halls.reduce((a,h)=>a+hallUsableCapacity(h),0)+" seats"},
+=======
+          {label:"Exam Halls",   val:halls.length,                                 grad:"from-violet-500 to-purple-600", sub:(function(){const t={};halls.forEach(h=>{const k=h.hallType||"University";t[k]=(t[k]||0)+1});return Object.entries(t).map(([k,v])=>k+" "+v).join(" · ")||"0"})()+" · "+halls.reduce((a,h)=>a+(h.capacity||0),0)+" seats"},
+>>>>>>> origin/main
           {label:"Exams",        val:exams.length,                                 grad:"from-amber-500 to-orange-500",  sub:exams.filter(e=>e.seatinggenerated).length+" seated"},
           {label:"Seated",       val:exams.filter(e=>e.seatinggenerated).length,   grad:"from-emerald-500 to-teal-500", sub:"ready to print"},
         ].map(s=>(
@@ -9014,7 +9598,11 @@ function HallsPage({ halls, setHalls, showToast }) {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-black text-gray-900">Exam Halls</h1>
+<<<<<<< HEAD
           <p className="text-gray-400 text-sm">{halls.length} halls · {halls.reduce((a,h)=>a+hallUsableCapacity(h),0)} total seats</p>
+=======
+          <p className="text-gray-400 text-sm">{halls.length} halls · {halls.reduce((a,h)=>a+(h.capacity||0),0)} total seats</p>
+>>>>>>> origin/main
         </div>
         <Btn onClick={openAdd}><Ic.Plus/>Add Hall</Btn>
       </div>
@@ -9053,8 +9641,12 @@ function HallsPage({ halls, setHalls, showToast }) {
                 {(function(){
                   const nCols3 = (hallLy.columns||[{seats:1}]).length;
                   const nRows3 = hall.numbenches||15;  // numbenches IS rows
+<<<<<<< HEAD
                   const realCap = hallUsableCapacity(hall);
                   const capErr = hallCapacityConfigError(hall);
+=======
+                  const realCap = hall.capacity || (nRows3 * spr3);
+>>>>>>> origin/main
                   return (<>
                     <div className="flex justify-between py-1.5 border-b border-gray-50 text-sm">
                       <span className="text-gray-400 flex items-center gap-1"><Ic.Hall/> Benches</span>
@@ -9068,7 +9660,10 @@ function HallsPage({ halls, setHalls, showToast }) {
                       <span className="text-gray-400">Total Capacity</span>
                       <span className="font-black text-blue-600 text-xl">{realCap}</span>
                     </div>
+<<<<<<< HEAD
                     {capErr && <div className="text-[11px] text-red-600 font-bold mt-1">⚠ {capErr}</div>}
+=======
+>>>>>>> origin/main
                   </>);
                 })()}
               </div>
@@ -11127,6 +11722,7 @@ function catAllocateHalls(examCount, needPerExam, halls, busyHallIds, partsPerEx
   return slices;
 }
 
+<<<<<<< HEAD
 // Build a per-exam plan holding ONLY the seats whose students match `keep`
 // (a predicate), for every hall the combined plan used. The benches are rebuilt
 // from that exam's own seats, so the sub-plan is a self-contained, valid plan
@@ -11238,6 +11834,8 @@ function catCoSeatSlot(rows, halls, busyHallIds){
   return { assignments:assignments, unplacedTotal:unplaced.length, hallsUsed:Object.keys(owner) };
 }
 
+=======
+>>>>>>> origin/main
 function catClean(v){ return schedClean(v); }
 function catUc(v){ return schedUc(v); }
 function catTitle(v){
@@ -14601,7 +15199,11 @@ function catRebuildRow(row, patch, ctx){
   // into a real row, which is how a mis-read non-exam activity gets imported.
   const dropped=manual.excluded===true||(manual.excluded!==false&&!!en.ignored);
   const book={
+<<<<<<< HEAD
     en:en, ctx:ctx, manual:manual, edited:edited, file:row.file, key:row.key,
+=======
+    en:en, ctx:ctx, manual:manual, edited:edited, file:row.file,
+>>>>>>> origin/main
     // The department the sheet was read as, kept across edits so the code that will
     // be written can be told apart from the code this row arrived with.
     readDept:row.readDept!==undefined?row.readDept:(ctx.deptCode||""),
@@ -15234,6 +15836,7 @@ async function catOpenPdfMulti(file){
 //    server-side bound.
 //  · it never applies an answer. Suggestions arrive as text beside the row, and
 //    a suggestion is only ever used when a person clicks "Use this".
+<<<<<<< HEAD
 // The outcome of ONE call to the second-opinion service, as data rather than an
 // exception, so the caller can tell "this deployment has no serverless function"
 // (404/405/501), "the service is busy" (503), and "the network failed" apart — and
@@ -15269,6 +15872,18 @@ async function catLlmSuggest(items){
   let data=null;
   if(res){ try{ data=await res.json(); }catch(e){} }
   return catLlmReply(res?res.status:0, data, networkError);
+=======
+async function catLlmSuggest(items){
+  const res=await fetch("/.netlify/functions/cat-llm", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ items:items }),
+  });
+  let data=null;
+  try{ data=await res.json(); }catch(e){}
+  if(!res.ok) throw new Error((data&&data.error)||("The second opinion service is unavailable (HTTP "+res.status+")."));
+  return data&&data.suggestions||[];
+>>>>>>> origin/main
 }
 
 // V2 never throws: like the old reader it returns a per-file verdict, so one bad
@@ -15547,6 +16162,7 @@ function catCombinedSummary(files, rows, collegeId, metaByFile, batchDuplicates)
     },{ matched:0, changed:0, unmatched:0 })
   };
 }
+<<<<<<< HEAD
 // The single accessor every per-section map is keyed by. A FILE carries its
 // stable identity as `id`; a ROW carries the same value as `key`. `name`/`file`
 // are only the human-readable labels and are NOT unique (two files may share a
@@ -15581,6 +16197,22 @@ function catCombineResults(results, collegeId){
     if(r.preview&&r.preview.ctx) ctxByFile[key]=r.preview.ctx;
     if(r.preview&&r.preview.rows) r.preview.rows.forEach(function(row){
       row.key=key; row.file=r.name;
+=======
+function catCombineResults(results, collegeId){
+  const files=[]; const rows=[]; const metaByFile={}; const ctxByFile={};
+  (results||[]).forEach(function(r){
+    files.push({ name:r.name, status:r.status, error:r.error, steps:r.steps,
+      meta:r.meta, mode:r.mode, pageCount:r.pageCount, dates:r.dates||[],
+      columnYears:(r.parsed&&r.parsed.columnYears)||[], ignoredCells:r.ignoredCells||[],
+      engine:r.engine||"legacy", jsonStats:r.jsonStats||null, summary:r.preview?r.preview.summary:null });
+    if(r.meta) metaByFile[r.name]=r.meta;
+    // The per-file context (the live exam and student lists, the department code
+    // and the sheet's published date range) is kept so a corrected row can be
+    // re-derived against exactly the same inputs the original read used.
+    if(r.preview&&r.preview.ctx) ctxByFile[r.name]=r.preview.ctx;
+    if(r.preview&&r.preview.rows) r.preview.rows.forEach(function(row){
+      row.file=r.name;
+>>>>>>> origin/main
       rows.push(row);
     });
   });
@@ -15589,7 +16221,11 @@ function catCombineResults(results, collegeId){
   // this, importing the same timetable twice — or two files that both carry one
   // department's sheet — would create the exam twice.
   const batchDuplicates=catMarkBatchDuplicates(rows, collegeId);
+<<<<<<< HEAD
   return { files:files, rows:rows, collegeId:collegeId, metaByFile:metaByFile, ctxByFile:ctxByFile,
+=======
+  return { files:files, rows:rows, collegeId:collegeId, ctxByFile:ctxByFile,
+>>>>>>> origin/main
     summary:catCombinedSummary(files, rows, collegeId, metaByFile, batchDuplicates) };
 }
 
@@ -15602,12 +16238,17 @@ function catRecount(c){
   const rows=c.rows.slice();
   const batchDuplicates=catMarkBatchDuplicates(rows, c.collegeId);
   const files=c.files.map(function(f){
+<<<<<<< HEAD
     return Object.assign({},f,{ summary:catFileSummary(rows.filter(function(r){ return catSectionKeyOf(r)===catSectionKeyOf(f); })) });
+=======
+    return Object.assign({},f,{ summary:catFileSummary(rows.filter(function(r){ return r.file===f.name; })) });
+>>>>>>> origin/main
   });
   return Object.assign({},c, { rows:rows, files:files,
     summary:catCombinedSummary(files, rows, c.collegeId, c.metaByFile, batchDuplicates) });
 }
 
+<<<<<<< HEAD
 // The rows that are ready to save but whose department section can no longer be
 // found in the combined preview. This is the guard that turns a missing lookup
 // into a clear validation message instead of an "undefined" crash mid-commit.
@@ -15616,6 +16257,8 @@ function catMissingSectionRows(combined, rows){
   return (rows||[]).filter(function(r){ return !byFile[catSectionKeyOf(r)]; });
 }
 
+=======
+>>>>>>> origin/main
 function CATPDFImportModal({ open, onClose, exams, setExams, students, subjects, halls, college, branches, showToast, kind }){
   const isJsonMode=kind==="json";
   const fileRef=useRef(null);
@@ -15628,7 +16271,11 @@ function CATPDFImportModal({ open, onClose, exams, setExams, students, subjects,
   const [result,setResult]=useState(null);
   // The optional second opinion: which rows it has been asked about, what it
   // suggested, and what it said when it could not be reached.
+<<<<<<< HEAD
   const [llm,setLlm]=useState({ busy:false, error:"", unavailable:false, asked:false, byRow:{} });
+=======
+  const [llm,setLlm]=useState({ busy:false, error:"", asked:false, byRow:{} });
+>>>>>>> origin/main
   // Manual correction: off by default, so the table stays a reading of the sheet
   // until somebody deliberately starts changing it.
   const [editMode,setEditMode]=useState(false);
@@ -15729,6 +16376,7 @@ function catLlmCandidates(rows){
 }
 
 async function askSecondOpinion(){
+<<<<<<< HEAD
   if(!combined||llm.busy||llm.unavailable) return;
   const rows=catLlmCandidates(combined.rows).slice(0,20);
   if(!rows.length) return;
@@ -15754,6 +16402,28 @@ async function askSecondOpinion(){
     setLlm({ busy:false, error:"", unavailable:false, asked:true, byRow:byRow });
   }catch(e){
     setLlm({ busy:false, error:e.message||String(e), unavailable:false, asked:true, byRow:{} });
+=======
+  if(!combined||llm.busy) return;
+  const rows=catLlmCandidates(combined.rows).slice(0,20);
+  if(!rows.length) return;
+  setLlm({ busy:true, error:"", asked:true, byRow:{} });
+  try{
+    // Only the printed text of the cell travels, keyed by row index.
+    const suggestions=await catLlmSuggest(rows.map(function(r,i){
+      return { id:i, raw:r.rawCell||((r.subCode||"")+" "+(r.subjectName||"")).trim(),
+        readerCode:r.subCode, readerName:r.subjectName };
+    }));
+    const byRow={};
+    suggestions.forEach(function(s){
+      const r=rows[Number(s.id)];
+      if(r) byRow[combined.rows.indexOf(r)]=s;
+    });
+    setLlm({ busy:false, error:"", asked:true, byRow:byRow });
+  }catch(e){
+    // Not being able to ask is never an error the administrator has to clear: the
+    // timetable is read either way, and this only ever adds advice.
+    setLlm({ busy:false, error:e.message||String(e), asked:true, byRow:{} });
+>>>>>>> origin/main
   }
 }
 
@@ -15771,7 +16441,11 @@ function editRow(i, patch){
     if(!prev||!prev.rows||!prev.rows[i]) return prev;
     const rows=prev.rows.slice();
     const src=rows[i];
+<<<<<<< HEAD
     const ctx=prev.ctxByFile&&prev.ctxByFile[catSectionKeyOf(src)];
+=======
+    const ctx=prev.ctxByFile&&prev.ctxByFile[src.file];
+>>>>>>> origin/main
     // The live lists, not the ones captured when the file was read: an edit is
     // judged against the exams that exist now.
     const live=Object.assign({},ctx||{}, { exams:exams, students:students, collegeId:prev.collegeId });
@@ -15788,7 +16462,11 @@ function toggleRow(i){
   setCombined(function(prev){
     if(!prev||!prev.rows||!prev.rows[i]) return prev;
     const rows=prev.rows.slice();
+<<<<<<< HEAD
     rows[i]=catRebuildRow(rows[i], { excluded:!rows[i].ignored }, prev.ctxByFile&&prev.ctxByFile[catSectionKeyOf(rows[i])]);
+=======
+    rows[i]=catRebuildRow(rows[i], { excluded:!rows[i].ignored }, prev.ctxByFile&&prev.ctxByFile[rows[i].file]);
+>>>>>>> origin/main
     return catRecount(Object.assign({},prev,{ rows:rows }));
   });
 }
@@ -15796,7 +16474,11 @@ function toggleRow(i){
 function resetAll(){
   setCombined(function(prev){
     if(!prev||!prev.rows) return prev;
+<<<<<<< HEAD
     const rows=prev.rows.map(function(r){ return (r.edited||r.manual&&Object.keys(r.manual).length)?catRebuildRow(r,null,prev.ctxByFile&&prev.ctxByFile[catSectionKeyOf(r)]):r; });
+=======
+    const rows=prev.rows.map(function(r){ return (r.edited||r.manual&&Object.keys(r.manual).length)?catRebuildRow(r,null,prev.ctxByFile&&prev.ctxByFile[r.file]):r; });
+>>>>>>> origin/main
     return catRecount(Object.assign({},prev,{ rows:rows }));
   });
 }
@@ -15818,6 +16500,7 @@ async function commit(){
     if(busy||!combined||!combined.summary.ready) return;
     const ready=combined.rows.filter(function(r){ return r.ready; });
     if(!ready.length) return;
+<<<<<<< HEAD
     // If a ready row can no longer be linked to the department section it was
     // read from (a stale preview, or a filename shared between two files that the
     // reader merged), stop with a clear message BEFORE any write. The old plan
@@ -15829,6 +16512,12 @@ async function commit(){
       .map(function(f){
         const n=ready.filter(function(r){ return catSectionKeyOf(r)===catSectionKeyOf(f); }).length;
         return "  "+((f.meta&&f.meta.departmentName)||f.name)+" — "+n+" exam"+(n===1?"":"s");
+=======
+    const lines=combined.files.filter(function(f){ return f.status==="ok"; })
+      .map(function(f){
+        const n=ready.filter(function(r){ return r.file===f.name; }).length;
+        return "  "+(f.meta.departmentName||f.name)+" — "+n+" exam"+(n===1?"":"s");
+>>>>>>> origin/main
       });
     const editedCount=ready.filter(function(r){ return r.edited; }).length;
     if(!window.confirm("Create "+ready.length+" CAT exam"+(ready.length===1?"":"s")+"?\n\n"+lines.join("\n")
@@ -15845,7 +16534,11 @@ async function commit(){
       // was handed EVERY CAT hall (14 exams all claiming the same rooms), which
       // made the date/session conflict check meaningless for CAT.
       const bucketOf=function(r){
+<<<<<<< HEAD
         const m=(combined.metaByFile&&combined.metaByFile[catSectionKeyOf(r)])||{};
+=======
+        const m=combined.metaByFile[r.file]||{};
+>>>>>>> origin/main
         return (m&&m.bucket)||"CAT";
       };
       const catHallPool=function(r){
@@ -15868,6 +16561,7 @@ async function commit(){
         const set=busyBySlot[k];
         (e.hallids||[]).forEach(function(hid){ set.add(hid); });
       });
+<<<<<<< HEAD
       const idxBySlot={};
       const orderedSlots=[];
       ready.forEach(function(r,i){
@@ -15884,6 +16578,34 @@ async function commit(){
         // generated as ONE plan over the union of the slot's halls and each exam
         // then owns the halls it occupies (the FIRST occupant of each shared hall
         // keeps the hallids so admin regeneration never false-conflicts).
+=======
+      const slicesBySlot={};
+      const orderedSlots=[];
+      ready.forEach(function(r){
+        const k=slotKey(r.date,r.session,bucketOf(r));
+        if(!slicesBySlot[k]){ slicesBySlot[k]=[]; orderedSlots.push(k); }
+      });
+      orderedSlots.forEach(function(k){
+        const rowsK=ready.filter(function(r){ return slotKey(r.date,r.session,bucketOf(r))===k; });
+        const pool=catHallPool(rowsK[0]);
+        // Sizes each slice by gender partition, not by the flat roster total: each
+        // partition must start in its own hall, so a partly filled male hall
+        // cannot lend its remaining seats to the female block.
+        const parts=rowsK.map(function(r){
+          const s=catSplitByGender(r.students||[]);
+          return [s.male.length, s.female.length, s.other.length];
+        });
+        const res=catAllocateHalls(rowsK.length, rowsK.map(function(r){ return r.studentCount||0; }), pool, busyBySlot[k]||new Set(), parts);
+        rowsK.forEach(function(r,i){ slicesBySlot[k][ready.indexOf(r)]=res[i]; });
+      });
+      const slices=ready.map(function(r){ return slicesBySlot[slotKey(r.date,r.session,bucketOf(r))][ready.indexOf(r)]; });
+
+      ready.forEach(function(r,i){
+        const id=uid();
+        const m=combined.metaByFile[r.file]||{};
+        const bucket=bucketOf(r);
+        const slice=slices[i];
+>>>>>>> origin/main
         const rec={
           id:id, college_id:Store.getCollegeId(),
           subject:r.subjectName||r.subCode, subjectTitle:r.subjectName||r.subCode,
@@ -15898,7 +16620,11 @@ async function commit(){
           // who belongs to it rather than relying on a later dept+year lookup.
           registerNumbers:(r.students||[]).map(function(s){ return String(s.regno); }),
           studentCount:r.studentCount||0,
+<<<<<<< HEAD
           hallids:[],
+=======
+          hallids:slice.halls.map(function(h){ return h.id; }),
+>>>>>>> origin/main
           seatinggenerated:false, source:"CAT_TIMETABLE_IMPORT",
           collegeCode:(m.college&&m.college.code)||"", collegeName:(m.college&&m.college.name)||""        };
         updates["exams/"+id]=rec;
@@ -15906,6 +16632,7 @@ async function commit(){
       });
       await dbAtomicUpdate(updates);
 
+<<<<<<< HEAD
       // ── CO-SEAT each created exam ───────────────────────────────────────────
       // Seating plans live in their own collection, so they cannot ride along in
       // the atomic exam write above — they are persisted straight after. Each
@@ -15956,6 +16683,41 @@ async function commit(){
         }catch(err){
           // A whole-slot failure surfaces each exam of the slot with the cause.
           idxs.forEach(function(i){ needAttention.push({ exam:created[i], reason:(err&&err.message)||String(err) }); });
+=======
+      // ── AUTO-SEAT each created exam ────────────────────────────────────────
+      // Seating plans live in their own collection, so they cannot ride along in
+      // the atomic exam write above — they are persisted straight after.
+      const seated=[], needAttention=[];
+      for(let ci=0; ci<created.length; ci++){
+        const rec=created[ci];
+        // The roster and the chosen halls come from `ready`/`slices` rather than
+        // from fields hung on `rec`. Anything parked on the record here is part of
+        // the object handed to dbAtomicUpdate and would be written to Firebase.
+        const roster=(ready[ci]&&ready[ci].students)||[];
+        const seats=(slices[ci]&&slices[ci].halls)||[];
+        if(!roster.length){ needAttention.push({ exam:rec, reason:"No students matched this exam" }); continue; }
+        if(!seats.length){ needAttention.push({ exam:rec, reason:"No free CAT hall available for this date/session" }); continue; }
+        try{
+          // generateSmartSeating applies the male → female → other partition itself,
+          // each starting in the next unused hall of this exam's own slice.
+          const plan=generateSmartSeating(
+            [{ label:rec.subjectCode||rec.subject, students:roster, rules:CAT_SEATING_RULES }],
+            seats, {}
+          );
+          const __sr=window.__lastSeatingResult||{};
+          const unplaced=__sr.unplaced||[];
+          const problems=(__sr.report&&__sr.report.validation)||[];
+          // Never persist a partial or rule-violating plan: the exam stays
+          // seatinggenerated:false so it can be fixed by hand.
+          if(unplaced.length){ needAttention.push({ exam:rec, reason:unplaced.length+" student(s) had no legal seat" }); continue; }
+          if(problems.length){ needAttention.push({ exam:rec, reason:problems[0] }); continue; }
+          await Store.setSeatingPlan(rec.id, plan);
+          await Store.updateExam(rec.id, {seatinggenerated:true});
+          rec.seatinggenerated=true;
+          seated.push(rec);
+        }catch(err){
+          needAttention.push({ exam:rec, reason:(err&&err.message)||String(err) });
+>>>>>>> origin/main
         }
       }
       setExams(function(prev){ return prev.concat(created); });
@@ -16030,7 +16792,11 @@ async function commit(){
   // taking the file's code instead would file a corrected row under the code of the
   // department its sheet was read as.
   function rowDeptCode(r){
+<<<<<<< HEAD
     const meta=combined&&combined.metaByFile&&combined.metaByFile[catSectionKeyOf(r)];
+=======
+    const meta=combined&&combined.metaByFile&&combined.metaByFile[r.file];
+>>>>>>> origin/main
     if(catUc(r.dept)===catUc(r.readDept)) return (meta&&meta.departmentCode)||"";
     if(!r.dept) return "";
     return catMatchDeptBranch(r.dept, { branches:branches }).code||"";
@@ -16082,7 +16848,11 @@ async function commit(){
                 <div className="border rounded-2xl overflow-hidden">
                   {combined.files.map(function(f){
                     return (
+<<<<<<< HEAD
                       <div key={f.id||f.name} className="px-4 py-3 border-t border-gray-100 flex items-center gap-3">
+=======
+                      <div key={f.name} className="px-4 py-3 border-t border-gray-100 flex items-center gap-3">
+>>>>>>> origin/main
                         <span className={"px-2 py-0.5 rounded-full text-[10px] font-bold "+fileTone(f)}>
                           {f.status==="ok"?"Processed":(f.name===stage.split(": ")[1]?"Checking…":"Queued")}
                         </span>
@@ -16165,7 +16935,11 @@ async function commit(){
 
               {combined.files.map(function(f){
                 return (
+<<<<<<< HEAD
                   <div key={f.id||f.name} className="mb-3 border rounded-2xl overflow-hidden">
+=======
+                  <div key={f.name} className="mb-3 border rounded-2xl overflow-hidden">
+>>>>>>> origin/main
                     <div className="px-4 py-3 bg-gray-50 flex items-center gap-3 flex-wrap">
                       <span className={"px-2.5 py-1 rounded-full text-[10px] font-black "+fileTone(f)}>{f.status==="ok"?"VALID TIMETABLE":"BLOCKED"}</span>
                       <span className="text-sm font-black text-gray-800 truncate">{f.name}</span>
@@ -16247,8 +17021,13 @@ async function commit(){
                       A second opinion can re-read the {Math.min(20,catLlmCandidates(combined.rows).length)} cell(s) that need a look.
                       It is optional, it never changes anything by itself, and every suggestion must be applied by hand.
                     </span>
+<<<<<<< HEAD
                     <Btn onClick={askSecondOpinion} disabled={llm.busy||llm.unavailable} className="ml-auto">
                       {llm.busy?"Asking…":(llm.unavailable?"Second opinion unavailable":"Ask for a second opinion")}
+=======
+                    <Btn onClick={askSecondOpinion} disabled={llm.busy} className="ml-auto">
+                      {llm.busy?"Asking…":"Ask for a second opinion"}
+>>>>>>> origin/main
                     </Btn>
                   </div>
                   {llm.error&&(
@@ -16256,7 +17035,11 @@ async function commit(){
                       {llm.error} — the timetable above is unaffected and can still be imported.
                     </div>
                   )}
+<<<<<<< HEAD
                   {llm.asked&&!llm.error&&!llm.unavailable&&!Object.keys(llm.byRow).length&&(
+=======
+                  {llm.asked&&!llm.error&&!Object.keys(llm.byRow).length&&(
+>>>>>>> origin/main
                     <div className="mt-2 text-[11px] text-slate-500">
                       No suggestion came back for these cells. The readings above stand as they are.
                     </div>
@@ -16318,7 +17101,11 @@ async function commit(){
                   </thead>
                   <tbody>
                     {combined.rows.map(function(r,i){
+<<<<<<< HEAD
                       const newFile=i===0||catSectionKeyOf(combined.rows[i-1])!==catSectionKeyOf(r);
+=======
+                      const newFile=i===0||combined.rows[i-1].file!==r.file;
+>>>>>>> origin/main
                       const tones=r.ignored?"bg-gray-50 text-gray-400":(r.ready?"bg-white":"bg-red-50/40");
                       // The 3-digit code always comes from the Department/Branch
                       // Master that produced this file's row — never from the PDF.
@@ -16328,7 +17115,11 @@ async function commit(){
                       const dcode=rowDeptCode(r);
                       const changed=r.edited;
                       return (
+<<<<<<< HEAD
                         <tr key={catSectionKeyOf(r)+"#"+i} className={"border-t border-gray-100 "+(tones)+(changed?" ring-1 ring-inset ring-amber-300":"")}>
+=======
+                        <tr key={r.file+i} className={"border-t border-gray-100 "+(tones)+(changed?" ring-1 ring-inset ring-amber-300":"")}>
+>>>>>>> origin/main
                           {editMode&&(
                             <td className="px-3 py-2">
                               <input type="checkbox" checked={!r.ignored} title={r.ignored?"Include this row in the import":"Leave this row out of the import"}
@@ -17025,6 +17816,7 @@ function UniversityPDFImportModal({ open, onClose, exams, setExams, students, se
 }
 
 // ── EXAMS PAGE ────────────────────────────────────────────────────────────────
+<<<<<<< HEAD
 function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seatingPlansLoadWarning, setExams, setSeatingPlans, showToast, college }) {
   const [bdate,setBdate]=useState("");
   const [selected,setSelected]=useState(function(){return new Set();});
@@ -17290,6 +18082,9 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
 }
 
 function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, setSubjects, showToast, onGenerate, seatingPlans, setSeatingPlans, seatingPlansLoadWarning, college }) {
+=======
+function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, setSubjects, showToast, onGenerate, seatingPlans, setSeatingPlans, college }) {
+>>>>>>> origin/main
   const [showAdd,setShowAdd]=useState(false);
   const [editExam,setEditExam]=useState(null);
   const [examFilter,setExamFilter]=useState("upcoming");
@@ -17305,7 +18100,10 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
   const [showAttImp,setShowAttImp]=useState(false);
   const [showCatImp,setShowCatImp]=useState(false);
   const [showCatJsonImp,setShowCatJsonImp]=useState(false);
+<<<<<<< HEAD
   const [showBulk,setShowBulk]=useState(false);
+=======
+>>>>>>> origin/main
   const [branchMaster,setBranchMaster]=useState([]);
 
   useEffect(function(){ Store.getBranches().then(setBranchMaster).catch(function(){}); },[]);
@@ -17395,7 +18193,10 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
           <Btn variant="purple" onClick={()=>setShowAttImp(true)}><Ic.Upload/>Upload University Exam PDF</Btn>
           <Btn variant="purple" onClick={()=>setShowCatImp(true)}><Ic.Upload/>Upload CAT Test Timetable PDF</Btn>
           <Btn variant="purple" onClick={()=>setShowCatJsonImp(true)}><Ic.Upload/>Import CAT Timetable JSON</Btn>
+<<<<<<< HEAD
           <Btn variant="teal" onClick={()=>setShowBulk(true)}><Ic.Zap/>Bulk Seating by Date</Btn>
+=======
+>>>>>>> origin/main
           <Btn onClick={openAdd}><Ic.Plus/>Create Exam</Btn>
         </div>
       </div>
@@ -17465,8 +18266,11 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
         {!visibleExams.length&&<div className="text-center py-16 text-gray-400"><div className="flex justify-center mb-4 opacity-30 scale-150"><Ic.Cal/></div><p className="font-medium mt-2">{examFilter==="upcoming"?"No upcoming exams.":"No ended exams."}</p></div>}
       </div>
 
+<<<<<<< HEAD
       {showBulk&&<BulkSeatingModal onClose={()=>setShowBulk(false)} exams={exams} students={students} halls={halls} seatingPlans={seatingPlans} seatingPlansLoadWarning={seatingPlansLoadWarning} setExams={setExams} setSeatingPlans={setSeatingPlans} showToast={showToast} college={college}/>}
 
+=======
+>>>>>>> origin/main
       {showAdd&&<Modal title={editExam?"Edit Exam":"Create Exam"} onClose={()=>setShowAdd(false)} wide>
         <div className="grid grid-cols-2 gap-4">
           <div className="mb-4">
@@ -17519,7 +18323,11 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
               <button key={h.id} onClick={()=>toggleHall(h.id)} disabled={isBooked&&!isSelected}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all flex items-center gap-1.5 ${btnClass}`}>
                 <span className={`text-[10px] font-bold px-1 py-0.5 rounded border ${hallTypeColors[ht]||hallTypeColors.Other}`}>{ht}</span>
+<<<<<<< HEAD
                 {h.name} ({h.numbenches}Bx{h.studentsperbench}={hallUsableCapacity(h)})
+=======
+                {h.name} ({h.numbenches}Bx{h.studentsperbench}={h.capacity})
+>>>>>>> origin/main
                 {isBooked && <span className="text-[9px] font-bold text-red-500 ml-1">OCCUPIED</span>}
               </button>
             );})}
@@ -17603,16 +18411,20 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
   // A hall is listed exactly ONCE for each date+session it is used in. When
   // several exams of the same session share a hall, that hall becomes a single
   // view holding every one of their students — so no hall repeats in the picker.
+<<<<<<< HEAD
   // Views are keyed by the CANONICAL hall id (resolveHall), never the raw plan
   // key, so a physical hall stored under several alias ids (per-department
   // records, legacy keys, seat.hallId variants) still yields ONE view whose
   // count agrees with the Hall Notice for the same hall/date/session.
+=======
+>>>>>>> origin/main
   const hallViews = (() => {
     const rank = new Map(halls.map((h,i)=>[h.id,i]));
     const g = new Map();
     filteredSeated.forEach(e => {
       const p = seatingPlans[e.id]; if (!p) return;
       Object.keys(p).forEach(hid => {
+<<<<<<< HEAD
         const hp = p[hid]; if (!hp) return;
         const hall = resolveHall(halls, hid, hp);
         const hallId = (hall && hall.id) || hid;
@@ -17622,6 +18434,15 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
           v = { key, date:e.date, session:e.session, hallId,
                 hallName:(hall && hall.name) || hp.hallName || (halls.find(h=>h.id===hid)?.name || hid),
                 base:hp, exams:[] };
+=======
+        if (!p[hid]) return;
+        const key = e.date+"|"+e.session+"|"+hid;
+        let v = g.get(key);
+        if (!v) {
+          v = { key, date:e.date, session:e.session, hallId:hid,
+                hallName:p[hid].hallName || (halls.find(h=>h.id===hid)?.name || hid),
+                base:p[hid], exams:[] };
+>>>>>>> origin/main
           g.set(key, v);
         }
         v.exams.push(e);
@@ -17637,6 +18458,7 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
   const selView = hallViews.find(v => v.key === selKey) || null;
   const exam = selView ? selView.exams[0] : null;
   // Single-hall plan: the real hall layout + seats from EVERY exam sharing this
+<<<<<<< HEAD
   // hall in this date+session. Seats are merged FIRST-WINS over the SAME physical
   // seat-identity keys AND the SAME normalized-register rule the Hall Notice uses
   // (hallMergedUniqueSeats — the exact hnNoticeDedupeRows semantics), so this
@@ -17677,6 +18499,23 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
       }, [])
     : [];
 
+=======
+  // hall in this date+session.
+  const plan = (() => {
+    if (!selView) return null;
+    const seats = [...(selView.base.seats||[])];
+    const seen = new Set(seats.map(s=>s.seatNo));
+    selView.exams.forEach(e => {
+      const hp = seatingPlans[e.id]?.[selView.hallId]; if (!hp) return;
+      (hp.seats||[]).forEach(s => { if (s.seatNo && !seen.has(s.seatNo)) { seen.add(s.seatNo); seats.push(s); } });
+    });
+    return { [selView.hallId]: { ...selView.base, seats } };
+  })();
+  const viewCount = selView
+    ? selView.exams.reduce((a,e)=>a+(seatingPlans[e.id]?.[selView.hallId]?.seats?.length||0),0)
+    : 0;
+
+>>>>>>> origin/main
   function doSearch() {
     if (!plan) return;
     let found=null;
@@ -17728,10 +18567,17 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
     const basePlan = view.base;
     if (!h) return (basePlan || null);
     const ly = h.layoutConfig || null;
+<<<<<<< HEAD
     const inv = hallSeatInventory(h);
     const nCols = inv.columns.length;
     const nRows = inv.nRows;
     const colDefs = inv.columns;
+=======
+    const nCols = Math.max(1, (ly && ly.columns && ly.columns.length) || 3);
+    const nRows = Math.max(1, h.numbenches || 15);
+    const colDefs = (ly && ly.columns && ly.columns.length ? ly.columns : [{seats:1},{seats:1},{seats:1}])
+      .map(c => ({ seats: Math.max(1, Math.min(4, c.seats || 1)) }));
+>>>>>>> origin/main
     const ALPHA = ["A","B","C","D","E","F","G","H","I","J"];
 
     // Generate every physical seat in column-first vertical order — IDENTICAL to
@@ -17739,6 +18585,7 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
     const phys = [];
     colDefs.forEach((c, ci) => {
       const nSlots = c.seats;
+<<<<<<< HEAD
       for (let si = 1; si <= nSlots; si++) {
         for (let ri = 0; ri < nRows; ri++) {
           const bench = ci * nRows + ri + 1;
@@ -17747,6 +18594,16 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
             bench: bench, slot: si, colIdx: ci, rowIdx: ri,
             colLabel: (ALPHA[ci] || String.fromCharCode(65 + ci)),
             seatLabel: (ALPHA[ci] || String.fromCharCode(65 + ci)) + (ri + 1) + "." + si,
+=======
+      for (let si = 0; si < nSlots; si++) {
+        for (let ri = 0; ri < nRows; ri++) {
+          const bench = ci * nRows + ri + 1;
+          phys.push({
+            seatNo: h.id + "-B" + bench + "S" + (si + 1),
+            bench: bench, slot: si + 1, colIdx: ci, rowIdx: ri,
+            colLabel: (ALPHA[ci] || String.fromCharCode(65 + ci)),
+            seatLabel: (ALPHA[ci] || String.fromCharCode(65 + ci)) + (ri + 1) + "." + String(si + 1),
+>>>>>>> origin/main
             regno: null, name: null, dept: null, year: null, gender: null, hall: h.name, hallId: h.id
           });
         }
@@ -17755,6 +18612,7 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
 
     // Overlay occupied seats from every exam of THIS hall's date+session. Sessions
     // allocate independently, so only same-date+same-session exams may contribute —
+<<<<<<< HEAD
     // a different session reusing this hall must not appear here. Halls are matched
     // by canonical identity, and a saved seat lands on its physical cell through the
     // SAME seat-identity keys the notice renderer uses, so alias-keyed plans and
@@ -17780,21 +18638,41 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
         for (let i = 0; i < ks.length && !target; i++) target = bySlot[ks[i]] || null;
         if (!target || target.regno) return;
         Object.assign(target, s);
+=======
+    // a different session reusing this hall must not appear here.
+    const bySeatNo = {};
+    phys.forEach(p => { bySeatNo[p.seatNo] = p; });
+    const sharedPlans = view.exams
+      .filter(e => e.seatinggenerated && seatingPlans[e.id] && seatingPlans[e.id][hid])
+      .map(e => ({ e, hp: seatingPlans[e.id][hid] }));
+    sharedPlans.forEach(({ e, hp }) => {
+      (hp.seats || []).forEach(s => {
+        if (s && s.seatNo && bySeatNo[s.seatNo]) Object.assign(bySeatNo[s.seatNo], s);
+>>>>>>> origin/main
       });
     });
 
     const benchMap = {};
     phys.forEach(p => { if (!benchMap[p.bench]) benchMap[p.bench] = []; benchMap[p.bench].push(p); });
+<<<<<<< HEAD
     const seatsPerRow = hallSeatSlotsPerRow(inv);
+=======
+    const seatsPerRow = colDefs.reduce((a, c) => a + c.seats, 0);
+>>>>>>> origin/main
     return {
       hallName: h.name,
       numbenches: nRows,
       studentsperbench: seatsPerRow,
       nCols: nCols, nRows: nRows,
+<<<<<<< HEAD
       capacity: nRows * seatsPerRow,
       layoutConfig: ly,
       physicalSeats: phys.length,
       resolvedHallId: h.id,
+=======
+      capacity: phys.length,
+      layoutConfig: ly,
+>>>>>>> origin/main
       benches: Object.keys(benchMap).sort((a, b) => a - b).map(bn => {
         const benchNo = parseInt(bn, 10);
         return { benchNo, slots: benchMap[bn].sort((a, b) => a.slot - b.slot), capacity: colDefs[Math.floor((benchNo - 1) / nRows)] ? colDefs[Math.floor((benchNo - 1) / nRows)].seats : 1 };
@@ -17803,6 +18681,7 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
     };
   }
 
+<<<<<<< HEAD
   // The resolved FULL physical hall grid for the selected hall view (used by the
   // Hall View tab). Computed once so the rendered cell count feeds the integrity
   // warning below instead of being hidden inside the JSX.
@@ -17818,6 +18697,11 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
           </div>
         )}
       </div>
+=======
+  return (
+    <div className="p-8">
+      <div className="mb-6"><h1 className="text-3xl font-black text-gray-900">Seating Plans</h1></div>
+>>>>>>> origin/main
       <div className="flex gap-1 mb-4 p-1 bg-gray-100 rounded-xl w-fit">
         {[["upcoming","Upcoming"],["ended","Ended"],["all","All"]].map(([val,label])=>(
           <button key={val} onClick={()=>{setSeatedFilter(val);setSelKey(null);}}
@@ -17831,7 +18715,11 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
       <div className="space-y-5 mb-5">
         {hallViews.length>0&&[...new Set(hallViews.map(v=>v.date+"|"+v.session))].map(gk=>{
           const gv = hallViews.filter(v => (v.date+"|"+v.session) === gk);
+<<<<<<< HEAD
           const gTotal = gv.reduce((a,v)=>a+viewSeatCount(v),0);
+=======
+          const gTotal = gv.reduce((a,v)=>a+v.exams.reduce((b,e)=>b+(seatingPlans[e.id]?.[v.hallId]?.seats?.length||0),0),0);
+>>>>>>> origin/main
           const [gDate,gSession] = gk.split("|");
           return <div key={gk}>
             <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -17841,7 +18729,11 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
             </div>
             <div className="flex gap-2 flex-wrap">
               {gv.map(v=>{
+<<<<<<< HEAD
                 const cnt = viewSeatCount(v);
+=======
+                const cnt = v.exams.reduce((b,e)=>b+(seatingPlans[e.id]?.[v.hallId]?.seats?.length||0),0);
+>>>>>>> origin/main
                 return <button key={v.key} onClick={()=>{setSelKey(v.key);setResult(null);setSearch("");setViewMode("separate");}}
                   className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${selKey===v.key?"bg-blue-600 text-white":"bg-white border border-gray-200 text-gray-600 hover:border-blue-300"}`}>
                   {v.hallName} <span className="opacity-70 font-normal text-xs">{cnt}</span>
@@ -17866,6 +18758,7 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
             <span className="text-sm font-bold text-gray-700">{viewCount} students</span>
           </div>
         </div>
+<<<<<<< HEAD
         {selViewDuplicates.length>0&&(
           <div className="mb-5 p-4 rounded-xl border border-rose-200 bg-rose-50">
             <div className="text-xs font-black text-rose-700">Stale/duplicated saved data in this hall view</div>
@@ -17874,6 +18767,8 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
             </div>
           </div>
         )}
+=======
+>>>>>>> origin/main
         {result&&<div className={`mb-5 p-4 rounded-xl text-sm font-medium ${result==="notfound"?"bg-red-50 border border-red-200 text-red-600":"bg-green-50 border border-green-200 text-green-800"}`}>
           {result==="notfound"?"Student not found":`${result.name} (${result.regno}) \u2192 ${result.hallName} - Bench ${result.bench} / Slot ${result.slot} / ${result.seatNo}`}
         </div>}
@@ -17886,19 +18781,26 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
           </button>
         </div>
 
+<<<<<<< HEAD
         {viewMode==="separate" && gridIntegrityText && (
           <div className="mb-5 p-4 rounded-xl border border-amber-200 bg-amber-50">
             <div className="text-xs font-black text-amber-800">Hall layout vs saved plan mismatch</div>
             <div className="text-xs text-amber-700 mt-1">{gridIntegrityText}</div>
           </div>
         )}
+=======
+>>>>>>> origin/main
         {viewMode==="mixed" ? (
           // Compact list of every student in this hall's session, no bench grid
           <BenchLayout hall={createMixedHall()} examName={selView.hallName+" \u00b7 Mixed Departments"} highlightRegNo={result&&result!=="notfound"?result.regno:null}/>
         ) : (
           // The single hall's FULL physical layout, every paper of this session
           // merged at their exact physical seats.
+<<<<<<< HEAD
           <BenchLayout hall={hallGrid} examName={selView.hallName+" \u00b7 "+selView.date+" "+selView.session} highlightRegNo={result&&result!=="notfound"?result.regno:null}/>
+=======
+          <BenchLayout hall={buildPhysicalHall(selView)} examName={selView.hallName+" \u00b7 "+selView.date+" "+selView.session} highlightRegNo={result&&result!=="notfound"?result.regno:null}/>
+>>>>>>> origin/main
         )}
       </>}
     </div>
@@ -20795,9 +21697,13 @@ function runSeatingDiagSuite() {
       "12, 12, 18");
   }
 
+<<<<<<< HEAD
   // T5 — NoSameDept: the physical facing-seat model (same-bench left slot +
   //   bench-boundary facing seat; rows never compared). Same-dept S1/S2 stacking
   //   is interleaved away, so everyone is seated with 0 violations.
+=======
+  // T5 — NoSameDept: horizontal (prev-column same-row) only; vertical & same-bench allowed.
+>>>>>>> origin/main
   {
     const stus = [].concat(
       _deptBlock(1, 4, "CSE", 2),  _deptBlock(5, 4, "ECE", 1),
@@ -20807,12 +21713,21 @@ function runSeatingDiagSuite() {
       [_diagHall("h1", "Hall A", 4, [2, 2, 2])]);
     const problems = validatePlan(plan, { splitGender: false, noSameDept: true, noSameYear: false });
     const placed = _flatSeats(plan).length;
+<<<<<<< HEAD
     t("T5", "No-same-dept physical facing-seat model (16 placed, 0 violations)", placed === 16 && problems.length === 0,
       "placed=" + placed + ", violations=" + problems.length + " (vertical same-dept OK)",
       "placed 16, violations 0");
   }
 
   // T6 — NoSameYear: physical facing-seat model only.
+=======
+    t("T5", "No-same-dept horizontal only (16 placed, 0 violations)", placed === 16 && problems.length === 0,
+      "placed=" + placed + ", violations=" + problems.length + " (stacked S1/S2 and vertical same-dept OK)",
+      "placed 16, violations 0");
+  }
+
+  // T6 — NoSameYear: horizontal only.
+>>>>>>> origin/main
   {
     const stus = [].concat(
       _deptBlock(1, 4, "CSE", 2),  _deptBlock(5, 4, "ECE", 1),
@@ -20822,7 +21737,11 @@ function runSeatingDiagSuite() {
       [_diagHall("h1", "Hall A", 4, [2, 2, 2])]);
     const problems = validatePlan(plan, { splitGender: false, noSameDept: false, noSameYear: true });
     const placed = _flatSeats(plan).length;
+<<<<<<< HEAD
     t("T6", "No-same-year physical facing-seat model (16 placed, 0 violations)", placed === 16 && problems.length === 0,
+=======
+    t("T6", "No-same-year horizontal only (16 placed, 0 violations)", placed === 16 && problems.length === 0,
+>>>>>>> origin/main
       "placed=" + placed + ", violations=" + problems.length,
       "placed 16, violations 0");
   }
@@ -20842,9 +21761,15 @@ function runSeatingDiagSuite() {
       "placed 16, violations 0");
   }
 
+<<<<<<< HEAD
   // T8 — Single-department paper: the rule switches itself off (unsatisfiable),
   //   so CSE simply fills column A then spills into column B as one contiguous
   //   block; 8 placed / 0 unplaced and the plan validates clean.
+=======
+  // T8 — Department-block spill: one dept fills column A then spills into
+  //   column B as the SAME block (A→B pattern) in strict regno order;
+  //   8 placed / 0 unplaced and the plan validates clean.
+>>>>>>> origin/main
   {
     const stus = _deptBlock(1, 8, "CSE", 2);
     const plan = _seat("T8", stus,
@@ -20853,11 +21778,20 @@ function runSeatingDiagSuite() {
     const res = window.__lastSeatingResult;
     const placed = _flatSeats(plan).length;
     const spillIntoB = _flatSeats(plan).some(s => s.colIdx === 1 && (s.dept || "").toUpperCase() === "CSE");
+<<<<<<< HEAD
     const orderKept = _flatSeats(plan).map(s => s.regno).join(",") === stus.map(s => s.regno).join(",");
     const placedClean = validatePlan(plan, { splitGender: false, noSameDept: true, noSameYear: false }).length === 0;
     t("T8", "Single-dept paper: rule self-off, CSE fills col A → col B (8 placed, 0 unplaced, valid)",
       placed === 8 && (res.unplaced || []).length === 0 && spillIntoB && orderKept && placedClean,
       "placed=" + placed + ", unplaced=" + (res.unplaced || []).length + ", spillIntoB=" + spillIntoB + ", orderKept=" + orderKept + ", clean=" + placedClean,
+=======
+    const oneBlock = _flatSeats(plan).every(s => s.deptBlock === 0);
+    const orderKept = _flatSeats(plan).map(s => s.regno).join(",") === stus.map(s => s.regno).join(",");
+    const placedClean = validatePlan(plan, { splitGender: false, noSameDept: true, noSameYear: false }).length === 0;
+    t("T8", "Dept block: CSE fills col A → col B (8 placed, 0 unplaced, valid)",
+      placed === 8 && (res.unplaced || []).length === 0 && spillIntoB && oneBlock && orderKept && placedClean,
+      "placed=" + placed + ", unplaced=" + (res.unplaced || []).length + ", spillIntoB=" + spillIntoB + ", oneBlock=" + oneBlock + ", orderKept=" + orderKept + ", clean=" + placedClean,
+>>>>>>> origin/main
       "8 placed in one CSE block across A→B, 0 unplaced");
   }
 
@@ -22292,6 +23226,7 @@ function attAllocPoolKey(u){
 function attSessionKey(session){ return attUc(session==null?"":session); }
 
 function attAllocHallSeatDefs(hall){
+<<<<<<< HEAD
   const inv=hallSeatInventory(hall);
   const nRows=inv.nRows;
   const colDefs=inv.columns;
@@ -22307,6 +23242,21 @@ function attAllocHallSeatDefs(hall){
           colIdx:ci, rowIdx:ri,
           colLabel:(ALPHA_SEAT[ci]||String.fromCharCode(65+ci)),
           seatLabel:(ALPHA_SEAT[ci]||String.fromCharCode(65+ci))+(ri+1)+"."+si });
+=======
+  const ly=hall.layoutConfig||hall["layoutConfig"]||null;
+  const nRows=Math.max(1, hall.numbenches||15);
+  const colDefs=(ly&&ly.columns&&ly.columns.length>0)?ly.columns:Array.apply(null,Array(3)).map(function(){ return { seats:1 }; });
+  const out=[];
+  for(let ci=0; ci<colDefs.length; ci++){
+    const nSlots=Math.max(1, Math.min(4, colDefs[ci].seats||1));
+    for(let si=0; si<nSlots; si++){
+      for(let ri=0; ri<nRows; ri++){
+        const bench=ci*nRows+ri+1;
+        out.push({ seatNo:hall.id+"-B"+bench+"S"+(si+1), bench:bench, slot:si+1,
+          colIdx:ci, rowIdx:ri,
+          colLabel:(ALPHA_SEAT[ci]||String.fromCharCode(65+ci)),
+          seatLabel:(ALPHA_SEAT[ci]||String.fromCharCode(65+ci))+(ri+1)+"."+String(si+1) });
+>>>>>>> origin/main
       }
     }
   }
@@ -22690,10 +23640,17 @@ function generateAttendanceAutoAllocation(subjects, halls, exams, plansById){
       if(!ha||!ha.seats||!ha.seats.length) return;
       const h=ha.hall||hallById[hid]||null;
       const ly=h?(h.layoutConfig||h["layoutConfig"]||null):(ha.meta.layoutConfig||null);
+<<<<<<< HEAD
       const inv=hallSeatInventory(h?h:{ numbenches:ha.meta.numbenches, studentsperbench:ha.meta.studentsperbench, layoutConfig:ha.meta.layoutConfig });
       const nRows=inv.nRows;
       const colDefs=inv.columns;
       const seatsPerRow=hallSeatSlotsPerRow(inv);
+=======
+      const nRows=Math.max(1, h?(h.numbenches||15):(ha.meta.numbenches||15));
+      const colDefs=(ly&&ly.columns&&ly.columns.length>0)?ly.columns:Array.apply(null,Array(3)).map(function(){ return { seats:1 }; });
+      const seatsPerCol=colDefs.map(function(c){ return Math.max(1, Math.min(4, c.seats||1)); });
+      const seatsPerRow=seatsPerCol.reduce(function(a,b){ return a+b; }, 0);
+>>>>>>> origin/main
       const seats=ha.seats.slice();
       subjAssigned+=seats.length;
       plan[hid]={
@@ -22702,7 +23659,11 @@ function generateAttendanceAutoAllocation(subjects, halls, exams, plansById){
         studentsperbench:seatsPerRow,
         layoutConfig:ly,
         nCols:colDefs.length, nRows:nRows, capacity:nRows*seatsPerRow,
+<<<<<<< HEAD
         benches:attAllocBenches(seats, nRows, colDefs.map(function(c){ return Math.max(0, c.seats - (c.blocked||[]).length); })),
+=======
+        benches:attAllocBenches(seats, nRows, seatsPerCol),
+>>>>>>> origin/main
         seats:seats,
       };
     });
@@ -23113,6 +24074,7 @@ function runAttendanceDiagSuite(){
 // Replaces the old "Import Attendance PDF" page. Picks a hall and generates a
 // single sheet listing EVERY student seated in that hall (across all exams) with
 // their seat (A18.1) and register number.
+<<<<<<< HEAD
 // Hall Notice route helper: the selected date+session live in the query string so
 // the on-screen notice and the address bar can never disagree (same pattern as
 // the Global Notice). The notice itself is scoped to ONE date+session at a time.
@@ -23156,6 +24118,30 @@ function HallNoticePage({ halls, seatingPlans, exams, students, college, showToa
   // seated)" therefore equals the Seating Plans count, the summary and the
   // printed TOTAL for that exact date+session+hall.
   const { perHall, hallDates } = hallNoticePerHall(exams, seatingPlans, halls, selDate, selSession);
+=======
+function HallNoticePage({ halls, seatingPlans, exams, students, college, showToast }) {
+  // Collect every seated student per hall across ALL seating plans.
+  // Plan hall objects may be keyed by hall.id, seat.hallId, or hall name, and may
+  // omit hallName; resolveHall collapses all of those to ONE canonical hall id.
+  const perHall = {};
+  const hallDates = {};
+  exams.forEach(function(e){
+    const p = seatingPlans[e.id]; if (!p) return;
+    Object.keys(p).forEach(function(hid){
+      const hp = p[hid]; if (!hp || !hp.seats) return;
+      const hall = resolveHall(halls, hid, hp);
+      const hallId = (hall && hall.id) || (hp.hallId || hid);
+      const hallName = (hall && hall.name) || hp.hallName || hid;
+      if (!perHall[hallId]) perHall[hallId] = { hallId: hallId, hallName: hallName, seats: [] };
+      if (!hallDates[hallId]) hallDates[hallId] = {};
+      if (e.date) hallDates[hallId][e.date] = true;
+      (hp.seats||[]).forEach(function(s){
+        perHall[hallId].seats.push({ regno:s.regno, name:s.name, dept:s.dept,
+          seatLabel:s.seatLabel, seatNo:s.seatNo, bench:s.bench, slot:s.slot });
+      });
+    });
+  });
+>>>>>>> origin/main
 
   // Deduped hall list for the dropdown/cards — duplicate hall records for one
   // physical hall collapse to ONE entry with the seated count aggregated across
@@ -23169,6 +24155,7 @@ function HallNoticePage({ halls, seatingPlans, exams, students, college, showToa
     if (!hallOptions.some(function(o){ return o.id===selHallId; })) {
       setSelHallId(hallOptions.length ? hallOptions[0].id : "");
     }
+<<<<<<< HEAD
   }, [halls, seatingPlans, exams, selDate, selSession]);
 
   // Distinct dates offered, and the sessions available for the chosen date.
@@ -23185,10 +24172,14 @@ function HallNoticePage({ halls, seatingPlans, exams, students, college, showToa
     if (!p) p = pairs.length ? pairs[pairs.length - 1] : null;
     if (p) navigate(hnNoticePath(p.date, p.session));
   }
+=======
+  }, [halls, seatingPlans, exams]);
+>>>>>>> origin/main
 
   const seatsFor = function(opt){ return hallOptionSeats(perHall, opt); };
   const selOption = hallOptions.find(function(o){ return o.id===selHallId; }) || hallOptions[0] || null;
 
+<<<<<<< HEAD
   // EVERY read (selector count, preview, print, PDF) is filtered to the SAME
   // date+session (and hall in "one" mode), so all three can never describe
   // different allocations.
@@ -23206,13 +24197,28 @@ function HallNoticePage({ halls, seatingPlans, exams, students, college, showToa
       window.generateHallNoticesProforma(Object.assign(docOpts(), {
         download: true, filename: "Hall-Notice_" + selOption.name + "_" + stamp
       }), college);
+=======
+  function generate() {
+    if (mode==="one") {
+      if (!selOption || seatsFor(selOption).length === 0) { showToast("Select a hall with seated students first.","warn"); return; }
+      showToast("Generating hall notice PDF...","info");
+      window.generateHallNoticesProforma({
+        exams: exams, seatingPlans: seatingPlans, halls: halls || [],
+        hallId: selOption.id, download: true, filename: "Hall-Notice_" + selOption.name
+      }, college);
+>>>>>>> origin/main
       return;
     }
     if (!hallOptions.some(function(o){ return o.count>0; })) { showToast("No students seated in any hall yet.","warn"); return; }
     showToast("Generating hall notices PDF...","info");
+<<<<<<< HEAD
     window.generateHallNoticesProforma(Object.assign(docOpts(), {
       download: true, filename: "Hall-Notices_All_" + stamp
     }), college);
+=======
+    window.generateHallNoticesProforma({ exams: exams, seatingPlans: seatingPlans, halls: halls || [],
+      download: true, filename: "Hall-Notices_All" }, college);
+>>>>>>> origin/main
   }
 
   // Direct print of exactly what is on screen: in "one" mode that is the selected
@@ -23224,6 +24230,7 @@ function HallNoticePage({ halls, seatingPlans, exams, students, college, showToa
   function printNotice() {
     if (!doc.pages.length) { showToast("Nothing to print — no seated students in this selection.","warn"); return; }
     showToast("Opening print dialog...","info");
+<<<<<<< HEAD
     // no `download` flag => the notice is printed, not exported as PDF
     window.generateHallNoticesProforma(docOpts(), college);
   }
@@ -23232,6 +24239,23 @@ function HallNoticePage({ halls, seatingPlans, exams, students, college, showToa
   // hall), so what is on screen is exactly the sheet that prints AND exactly the
   // PDF that downloads.
   const doc = buildHallNoticesPrintDocument(docOpts(), college);
+=======
+    window.generateHallNoticesProforma({
+      exams: exams, seatingPlans: seatingPlans, halls: halls || [],
+      hallId: mode==="one" ? selOption.id : null
+      // no `download` flag => the notice is printed, not exported as PDF
+    }, college);
+  }
+
+  // Preview uses the SAME document builder as print and PDF, so what is on screen
+  // is exactly the sheet that prints AND exactly the PDF that downloads: a date+hall
+  // with FN and AN shows ONE A4 box with both complete notices (FN top / AN bottom);
+  // a single-session hall shows one full notice.
+  const doc = buildHallNoticesPrintDocument(
+    { exams: exams, seatingPlans: seatingPlans, halls: halls || [],
+      hallId: mode==="one" ? selOption.id : null },
+    college);
+>>>>>>> origin/main
 
   return (
     <div className="p-8">
@@ -23244,6 +24268,7 @@ function HallNoticePage({ halls, seatingPlans, exams, students, college, showToa
             <button key={val} onClick={()=>setMode(val)} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${mode===val?"bg-white text-gray-900 shadow-sm":"text-gray-500 hover:text-gray-700"}`}>{label}</button>
           ))}
         </div>
+<<<<<<< HEAD
         {pairs.length ? (
           <label className="flex items-center gap-2 text-sm font-bold text-gray-600">
             Date:
@@ -23263,6 +24288,8 @@ function HallNoticePage({ halls, seatingPlans, exams, students, college, showToa
         ) : (
           <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">No seating yet — generate seating first.</span>
         )}
+=======
+>>>>>>> origin/main
         {mode==="one" && (
           halls.length ? (
             <select value={selHallId} onChange={e=>setSelHallId(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold bg-white focus:outline-none focus:border-blue-400">
@@ -24538,7 +25565,10 @@ function App() {
   const [halls,setHalls]           = useState([]);
   const [exams,setExams]           = useState([]);
   const [seatingPlans,setSeatingPlans] = useState({});
+<<<<<<< HEAD
   const [seatingPlansLoadWarning,setSeatingPlansLoadWarning] = useState("");
+=======
+>>>>>>> origin/main
   const [dataLoading,setDataLoading]   = useState(false);
   const [dataError,setDataError]       = useState("");
   const [dbOk,setDbOk]             = useState(false);  // DB reachable?
@@ -24756,6 +25786,7 @@ const queueWatchKey = (!booting && user && user.role === "admin" && dbOk
   },[dbAttempt, booting]);
 
   // ── Step 2: Load college-scoped data AFTER login ─────────────────
+<<<<<<< HEAD
   // The old form `.catch(() => [])` turned every failed read into an empty,
   // successful-looking result, and awaited unbounded, so a read that never
   // settled left `dataLoading` true forever (only cleared in the `finally` of
@@ -24764,10 +25795,13 @@ const queueWatchKey = (!booting && user && user.role === "admin" && dbOk
   //   failure / timeout -> dataError, shown by the retryable error screen
   // Seating plans are loaded after the core data with their own realistic
   // timeout and carry forward any plan already held if a read fails.
+=======
+>>>>>>> origin/main
   async function loadCollegeData() {
     setDataLoading(true);
     setDataError("");
     try {
+<<<<<<< HEAD
       const data = await loadCollegeDataSet({
         getStudents:   () => Store.getStudents(),
         getHalls:      () => Store.getHalls(),
@@ -24787,6 +25821,24 @@ const queueWatchKey = (!booting && user && user.role === "admin" && dbOk
       console.warn("[loadCollegeData] failed: " + msg);
       setDataError(msg);
     }
+=======
+      const [s,h,e] = await Promise.all([
+        Store.getStudents().catch(()=>[]),
+        Store.getHalls().catch(()=>[]),
+        Store.getExams().catch(()=>[]),
+      ]);
+      setStudents(s||[]);
+      setHalls(fixHallCapacities(h));
+      setExams(e||[]);
+
+      // Load seating plans in background
+      const plans = {};
+      for (const exam of (e||[]).filter(x=>x.seatinggenerated)) {
+        try { const p = await Store.getSeatingPlan(exam.id); if(p) plans[exam.id]=p; } catch(e2){}
+      }
+      setSeatingPlans(plans);
+    } catch(err){ setDataError(err.message); }
+>>>>>>> origin/main
     finally { setDataLoading(false); }
   }
 
@@ -24930,6 +25982,7 @@ setPendingRegs(prev => (prev || []).filter(p => records.indexOf(p) < 0));
     </div>
   );
 
+<<<<<<< HEAD
   // The load failed or timed out. Note this sits AFTER the `dataError && !dbOk`
   // connection screen above, so it only ever catches a failure of the data load
   // itself (a signed-in user, a real route). It reuses DataErrorPage but the
@@ -24946,6 +25999,8 @@ setPendingRegs(prev => (prev || []).filter(p => records.indexOf(p) < 0));
     />
   );
 
+=======
+>>>>>>> origin/main
   // The URL is authoritative, so a signed-in user who lands on a page their
   // role does not own is told so here instead of being dropped into a
   // dashboard that ignores the URL. This runs after the 404 and public-route
@@ -24959,7 +26014,11 @@ setPendingRegs(prev => (prev || []).filter(p => records.indexOf(p) < 0));
   }
 
   if (user.role==="developer") return <div><DevDashboard onLogout={handleLogout} students={students} setStudents={setStudents} exams={exams} setExams={setExams} halls={halls} setHalls={setHalls} seatingPlans={seatingPlans} setSeatingPlans={setSeatingPlans}/></div>;
+<<<<<<< HEAD
   if (user.role==="admin")     return <div><AdminDashboard user={user} onLogout={handleLogout} students={students} setStudents={setStudents} halls={halls} setHalls={setHalls} exams={exams} setExams={setExams} seatingPlans={seatingPlans} setSeatingPlans={setSeatingPlans} seatingPlansLoadWarning={seatingPlansLoadWarning} pendingRegs={pendingRegs} queueLive={queueLive} queueErr={queueErr} onRetryQueue={retryQueue} onConfirmGroup={handleConfirmGroup} onRejectGroup={handleRejectGroup}/></div>;
+=======
+  if (user.role==="admin")     return <div><AdminDashboard user={user} onLogout={handleLogout} students={students} setStudents={setStudents} halls={halls} setHalls={setHalls} exams={exams} setExams={setExams} seatingPlans={seatingPlans} setSeatingPlans={setSeatingPlans} pendingRegs={pendingRegs} queueLive={queueLive} queueErr={queueErr} onRetryQueue={retryQueue} onConfirmGroup={handleConfirmGroup} onRejectGroup={handleRejectGroup}/></div>;
+>>>>>>> origin/main
   return <StudentDashboard user={user} onLogout={handleLogout} exams={exams} seatingPlans={seatingPlans}/>;
 }
 
