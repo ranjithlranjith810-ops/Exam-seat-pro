@@ -5039,9 +5039,16 @@ function hallCapacityWarningsFor(exam, halls) {
   return out;
 }
 
-function bulkExamRows(exams, date, students, halls, plansById) {
+function bulkExamRows(exams, date, students, halls, plansById, session) {
   const lookups = bulkBuildLookups(students, exams, halls);
-  const list = lookups.examsByDate.get(bulkCanonDate(date)) || [];
+  const wantSession = (arguments.length > 5 && session != null && String(session) !== "") ? bulkCanonSession(session) : "";
+  const list = (lookups.examsByDate.get(bulkCanonDate(date)) || []).filter(function (exam) {
+    // Session is an OPTIONAL filter so existing date-only callers keep working.
+    // When supplied, only exams of that sitting are listed — the hall-first flow
+    // never mixes FN and AN rows in one batch.
+    if (!wantSession) return true;
+    return bulkCanonSession(exam.session) === wantSession;
+  });
   return list.map(function (exam) {
     const matched = bulkExamStudents(exam, students, lookups);
     const hasPlan = !!(plansById && plansById[exam.id]);
@@ -5132,6 +5139,168 @@ function bulkBuildHallUsedSeats(exam, allExams, halls, plansById) {
     });
   }
   return used;
+}
+
+// ── Hall-first bulk selection (pure) ─────────────────────────────────────────
+// The bulk flow can run hall-FIRST: pick a date + session, see which halls are
+// free and how many seats remain, tick the halls to fill, and only then
+// generate. These helpers are pure (no DOM/Firebase), so the whole selection +
+// capacity/eligibility contract is deterministic and unit-testable.
+
+function bulkSessionExams(exams, date, session) {
+  const d = bulkCanonDate(date), s = bulkCanonSession(session);
+  return (exams || []).filter(function (e) {
+    return e && bulkCanonDate(e.date) === d && bulkCanonSession(e.session) === s;
+  });
+}
+
+// De-duplicate the eligible roster across a SET of exams so a student admitted
+// to two papers in the same sitting is counted ONCE for capacity. The regnos
+// seen in more than one exam are returned separately as a warning (the
+// generator still refuses an impossible combined roster at run time).
+function bulkDedupeRoster(exams, students, lookups) {
+  const L = lookups || bulkBuildLookups(students, exams, []);
+  const byKey = new Map();
+  const seenIn = new Map();
+  (exams || []).forEach(function (e) {
+    if (!e) return;
+    bulkExamStudents(e, students, L).forEach(function (s) {
+      const rk = normRegno(s.regno);
+      const idk = s.id != null ? "id:" + String(s.id).trim() : "";
+      const key = rk ? ("r:" + rk) : (idk || ("row:" + String(s.regno) + ":" + String(s.name)));
+      if (!byKey.has(key)) byKey.set(key, { student: s, exams: [] });
+      byKey.get(key).exams.push(String(e.id));
+      if (rk) {
+        if (!seenIn.has(rk)) seenIn.set(rk, []);
+        if (seenIn.get(rk).indexOf(String(e.id)) < 0) seenIn.get(rk).push(String(e.id));
+      }
+    });
+  });
+  const duplicates = [];
+  seenIn.forEach(function (ids, reg) { if (ids.length > 1) duplicates.push({ regno: reg, exams: ids }); });
+  const list = [];
+  byKey.forEach(function (rec) { list.push(rec.student); });
+  return { students: list, count: list.length, duplicates: duplicates };
+}
+
+// Seats already committed by OTHER applicable plans for a date/session, keyed by
+// canonical hall id. Exams in excludedExamIds are the ones about to be
+// regenerated together, so their existing plans must NOT count against the new
+// layout. Mirrors bulkBuildHallUsedSeats but with an explicit exclusion set.
+function bulkHallOccupancy(allExams, halls, plansById, date, session, excludedExamIds) {
+  const skip = new Set((excludedExamIds || []).map(function (x) { return String(x); }));
+  const d = bulkCanonDate(date), s = bulkCanonSession(session);
+  const used = {};
+  (allExams || []).forEach(function (e) {
+    if (!e || skip.has(String(e.id))) return;
+    if (bulkCanonDate(e.date) !== d || bulkCanonSession(e.session) !== s) return;
+    const plan = plansById ? plansById[e.id] : null;
+    if (!plan) return;
+    Object.keys(plan).forEach(function (hid) {
+      const hp = plan[hid] || {};
+      const hall = resolveHall(halls || [], hid, hp);
+      const cid = canonicalHallId(halls || [], hid, hp);
+      if (!used[cid]) used[cid] = new Set();
+      (hp.seats || []).forEach(function (sit) {
+        hallUsedSeatKeys(hall, sit).forEach(function (k) { if (k) used[cid].add(k); });
+      });
+    });
+  });
+  return used;
+}
+
+// Estimated head-count for ONE hall type across a set of exams, de-duplicated.
+function bulkRoomsEligible(exams, students, lookups, hallType) {
+  const L = lookups || bulkBuildLookups(students, exams, []);
+  const subset = (exams || []).filter(function (e) {
+    return e && examHallTypePool(e).indexOf(hallType) >= 0;
+  });
+  return bulkDedupeRoster(subset, students, L).count;
+}
+
+// The complete, self-consistent picture the hall-selection step renders and
+// validates: per-hall physical/usable/occupied/remaining/eligible numbers, the
+// deduped demand, and the aggregate totals with a clear capacity status. The
+// per-hall eligible figure is an ESTIMATE (a student eligible for several halls
+// is counted in each), so it is labelled as such in the UI.
+function bulkHallSelectionData(cfg) {
+  const c = cfg || {};
+  const date = c.date, session = c.session;
+  const allExams = c.allExams || c.exams || [];
+  const students = c.students || [];
+  const halls = c.halls || [];
+  const plansById = c.plansById || {};
+  const selectedExamIdList = (c.selectedExamIds || []).map(function (x) { return String(x); });
+  const selectedExamIds = new Set(selectedExamIdList);
+  const selectedHallIds = new Set((c.selectedHallIds || []).map(function (x) { return String(x); }));
+  const loadComplete = c.loadComplete !== false;
+  const lookups = c.lookups || bulkBuildLookups(students, allExams, halls);
+
+  const sessionExams = bulkSessionExams(allExams, date, session);
+  const selectedExams = sessionExams.filter(function (e) { return selectedExamIds.has(String(e.id)); });
+  const roster = bulkDedupeRoster(selectedExams, students, lookups);
+  const demand = roster.count;
+
+  const typesUsed = new Set();
+  selectedExams.forEach(function (e) { examHallTypePool(e).forEach(function (t) { typesUsed.add(t); }); });
+
+  const occupied = bulkHallOccupancy(allExams, halls, plansById, date, session, selectedExamIdList);
+  const seen = new Set();
+  const hallRows = [];
+  (halls || []).forEach(function (h) {
+    if (!h) return;
+    const cid = String(canonicalHallId(halls, h.id, h));
+    if (seen.has(cid)) return;   // collapse alias records to one physical hall
+    seen.add(cid);
+    const type = h.hallType || "University";
+    const usable = calcHallCapacity(h);
+    const usedKeys = occupied[cid] ? occupied[cid].size : 0;
+    const remaining = Math.max(0, usable - usedKeys);
+    const eligible = bulkRoomsEligible(selectedExams, students, lookups, type);
+    let selectable = true, reason = "";
+    if (!loadComplete) { selectable = false; reason = "Existing seating plans could not be fully loaded; generation is disabled until they reload."; }
+    else if (!selectedExams.length) { selectable = false; reason = "Select at least one exam first."; }
+    else if (!typesUsed.has(type)) { selectable = false; reason = "No selected exam uses " + type + " halls."; }
+    else if (usable <= 0) { selectable = false; reason = (hallCapacityConfigError(h) || "Hall has no usable seats."); }
+    else if (remaining <= 0) { selectable = false; reason = "Hall is fully occupied for this date and session."; }
+    hallRows.push({
+      id: cid, hall: h, name: h.name || h.id, type: type,
+      physical: hallPhysicalCapacity(h), usable: usable, occupied: usedKeys, remaining: remaining,
+      eligible: eligible, selectable: selectable, reason: reason,
+      selected: selectable && selectedHallIds.has(cid),
+    });
+  });
+
+  const chosen = hallRows.filter(function (r) { return r.selected; });
+  const combinedUsable = chosen.reduce(function (n, r) { return n + r.usable; }, 0);
+  const occupiedSeats = chosen.reduce(function (n, r) { return n + r.occupied; }, 0);
+  const remainingSeats = chosen.reduce(function (n, r) { return n + r.remaining; }, 0);
+  const canAccommodate = Math.min(demand, remainingSeats);
+  const shortfall = Math.max(0, demand - remainingSeats);
+  const capacityStatus = demand === 0 ? "no_eligible" : (remainingSeats >= demand ? "sufficient" : "insufficient");
+
+  const errors = [];
+  if (!loadComplete) errors.push("Existing seating plans could not be fully loaded; generation is disabled until they reload.");
+  else {
+    if (!selectedExams.length) errors.push("Select at least one exam on this date and session.");
+    if (!chosen.length) errors.push("Select at least one hall to seat students in.");
+    else if (capacityStatus === "insufficient") errors.push(
+      "Selected halls provide " + remainingSeats + " free seat(s) but " + demand
+      + " student(s) are eligible. Add halls or reduce the exam selection.");
+  }
+
+  return {
+    sessionExams: sessionExams, selectedExams: selectedExams,
+    demand: demand, rosterCount: roster.count, duplicates: roster.duplicates,
+    hallRows: hallRows,
+    totals: {
+      selectedHalls: chosen.length, combinedUsable: combinedUsable, occupied: occupiedSeats,
+      remaining: remainingSeats, demand: demand, canAccommodate: canAccommodate,
+      shortfall: shortfall, freeAfter: Math.max(0, remainingSeats - demand),
+      capacityStatus: capacityStatus, estimate: true,
+    },
+    validation: { ok: errors.length === 0, errors: errors },
+  };
 }
 
 function bulkGenerateOne(exam, students, halls, rules, allExams, plansById, lookups) {
@@ -5368,10 +5537,30 @@ async function runBulkSeatingCoSeated(cfg) {
     }
 
     const typeSet = new Set(examHallTypePool(active[0]));
-    const pool = halls.filter(function(h){return typeSet.has(h.hallType || "University");});
+    // Hall-first flow: generation is confined to the halls the operator picked.
+    // Absent a selection the historic behaviour (every hall of the type) stands,
+    // so existing callers and tests are unaffected.
+    const selectedHallSet = (cfg.selectedHallIds && cfg.selectedHallIds.length)
+      ? new Set(cfg.selectedHallIds.map(function(x){ return String(x); })) : null;
+    const pool = halls.filter(function(h){
+      if (!typeSet.has(h.hallType || "University")) return false;
+      if (selectedHallSet) {
+        const cid = canonicalHallId(halls, h.id, h);
+        if (!selectedHallSet.has(String(cid)) && !selectedHallSet.has(String(h.id))) return false;
+      }
+      return true;
+    });
     const used = {};
     relevant.forEach(function(e){ if (!activeIds.has(String(e.id))) addOccupied(used,plansById[e.id]); });
     const eligibleHalls = pool.filter(function(h){ return calcHallCapacity(h)>0; });
+    if (selectedHallSet && !eligibleHalls.length) {
+      active.forEach(function(e){
+        results.push({examId:e.id,exam:e,status:"failed",code:"no_halls",category:"NO_ELIGIBLE_HALLS",
+          reason:"None of the selected halls can seat this exam's hall type.",keptExisting:!!plansById[e.id]});
+      });
+      processed += selectedGroup.length;
+      continue;
+    }
     const totalCapacity = eligibleHalls.reduce(function(n,h){return n+calcHallCapacity(h);},0);
     const effectiveRules = Object.assign({},rules);
     const unsat = adjacencyImpossibility(tagged,effectiveRules), ruleWarnings=[];
@@ -17167,7 +17356,9 @@ function UniversityPDFImportModal({ open, onClose, exams, setExams, students, se
 // ── EXAMS PAGE ────────────────────────────────────────────────────────────────
 function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seatingPlansLoadWarning, setExams, setSeatingPlans, showToast, college }) {
   const [bdate,setBdate]=useState("");
+  const [bsession,setBsession]=useState("FN");
   const [selected,setSelected]=useState(function(){return new Set();});
+  const [selectedHalls,setSelectedHalls]=useState(function(){return new Set();});
   const [rules,setRules]=useState({splitGender:true,noSameDept:false,noSameYear:false,benchAdjacency:false});
   const [stage,setStage]=useState("configure");
   const [skipExisting,setSkipExisting]=useState(false);
@@ -17176,31 +17367,62 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
   const runningRef=useRef(false);
   const cancelRef=useRef(false);
   const plansByIdRef=useRef(null);
+  const hallSnapshotRef=useRef(null);
 
-  const rows = bdate ? bulkExamRows(exams, bdate, students, halls, Object.assign({}, seatingPlans||{}, plansByIdRef.current||{})) : [];
+  const mergedPlans = Object.assign({}, seatingPlans||{}, plansByIdRef.current||{});
+  const rows = bdate ? bulkExamRows(exams, bdate, students, halls, mergedPlans, bsession) : [];
   const eligibleRows = rows.filter(function(r){return r.eligible;});
   const selectedEligible = eligibleRows.filter(function(r){return selected.has(r.id);});
   const seatedRows = rows.filter(function(r){return r.hasPlan;});
   const totalEligibleStudents = selectedEligible.reduce(function(a,r){return a+r.eligibleStudents;},0);
-  const totalRequired = selectedEligible.reduce(function(a,r){return a+r.eligibleStudents;},0);
   const totalCapacity = selectedEligible.reduce(function(a,r){return a+r.hallCapacity;},0);
   const running = stage==="running";
 
+  // The live hall-first picture. Recomputed from the CURRENT exam + hall
+  // selection so the capacity/eligibility summary and the Continue guard can
+  // never disagree with what will actually be generated.
+  const hallPlan = (stage==="halls"||stage==="preview") ? bulkHallSelectionData({
+    date: bdate, session: bsession, exams: exams, allExams: exams, students: students, halls: halls,
+    plansById: mergedPlans, selectedExamIds: selectedEligible.map(function(r){return r.id;}),
+    selectedHallIds: Array.from(selectedHalls), loadComplete: !seatingPlansLoadWarning,
+  }) : null;
+
+  function defaultHallSelection(dateVal, sessionVal, examIds){
+    const plan = bulkHallSelectionData({
+      date: dateVal, session: sessionVal, exams: exams, allExams: exams, students: students, halls: halls,
+      plansById: seatingPlans||{}, selectedExamIds: examIds, selectedHallIds: [], loadComplete: !seatingPlansLoadWarning,
+    });
+    return new Set(plan.hallRows.filter(function(r){return r.selectable;}).map(function(r){return r.id;}));
+  }
   function pickDate(v){
     setBdate(v);
-    const rs = bulkExamRows(exams, v, students, halls, seatingPlans||{});
-    setSelected(new Set(rs.filter(function(r){return r.eligible;}).map(function(r){return r.id;})));
+    const rs = bulkExamRows(exams, v, students, halls, seatingPlans||{}, bsession);
+    const ids = rs.filter(function(r){return r.eligible;}).map(function(r){return r.id;});
+    setSelected(new Set(ids));
+    setSelectedHalls(defaultHallSelection(v, bsession, ids));
+    setStage("configure"); setReport(null); setProgress(null);
+  }
+  function pickSession(v){
+    setBsession(v);
+    const rs = bulkExamRows(exams, bdate, students, halls, seatingPlans||{}, v);
+    const ids = rs.filter(function(r){return r.eligible;}).map(function(r){return r.id;});
+    setSelected(new Set(ids));
+    setSelectedHalls(defaultHallSelection(bdate, v, ids));
     setStage("configure"); setReport(null); setProgress(null);
   }
   function toggleExam(id){ setSelected(function(prev){ const n=new Set(prev); if(n.has(id)) n.delete(id); else n.add(id); return n; }); }
   function selectAll(){ setSelected(new Set(eligibleRows.map(function(r){return r.id;}))); }
   function selectNone(){ setSelected(new Set()); }
+  function toggleHall(id){ setSelectedHalls(function(prev){ const n=new Set(prev); if(n.has(id)) n.delete(id); else n.add(id); return n; }); }
+  function selectAllHalls(){ if(hallPlan) setSelectedHalls(new Set(hallPlan.hallRows.filter(function(r){return r.selectable;}).map(function(r){return r.id;}))); }
+  function selectNoHalls(){ setSelectedHalls(new Set()); }
   function toggleRule(k){ setRules(function(r){ return Object.assign({},r,{[k]:!r[k]}); }); }
   function cancelRun(){ cancelRef.current=true; }
 
   async function runBatch(examList, overwrite){
     if(runningRef.current) return;
     runningRef.current=true; cancelRef.current=false;
+    if(hallPlan) hallSnapshotRef.current=hallPlan;
     setStage("running"); setReport(null);
     if(!plansByIdRef.current) plansByIdRef.current=Object.assign({},seatingPlans||{});
     const plansById=plansByIdRef.current;
@@ -17221,6 +17443,7 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
       const res=await runBulkSeating({
         exams: examList, allExams: exams, students: students, halls: halls, rules: rules,
         coSeat: true,
+        selectedHallIds: Array.from(selectedHalls),
         plansById: plansById, loadPlan: loadPlan, savePlan: savePlan,
         isCancelled: function(){ return cancelRef.current; },
         confirmOverwrite: function(){ return !!overwrite; },
@@ -17238,6 +17461,11 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
   function startBatch(){
     if(!selectedEligible.length){ showToast("Select at least one eligible exam","error"); return; }
     if(!halls.length){ showToast("No halls configured. Add halls first.","error"); return; }
+    setStage("halls");
+  }
+  function continueToPreview(){
+    if(!hallPlan) return;
+    if(!hallPlan.validation.ok){ showToast(hallPlan.validation.errors[0]||"Fix the selection before continuing","error"); return; }
     setStage("preview");
   }
 
@@ -17257,11 +17485,27 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
 
   return (
     <Modal title="Bulk Seating by Date" onClose={function(){ if(!running) onClose(); }} wide>
-      {/* Date picker */}
-      <div className="mb-5">
-        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Exam date</label>
-        <input type="date" value={bdate} onChange={function(e){pickDate(e.target.value);}} disabled={running}
-          className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 text-sm text-gray-800 font-medium focus:outline-none focus:border-blue-400 bg-white"/>
+      {/* Date + session picker. Date and session together identify the sitting,
+          and a hall is only ever shared within one sitting. */}
+      <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Exam date</label>
+          <input type="date" value={bdate} onChange={function(e){pickDate(e.target.value);}} disabled={running}
+            className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 text-sm text-gray-800 font-medium focus:outline-none focus:border-blue-400 bg-white"/>
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Session</label>
+          <div className="flex gap-2">
+            {["FN","AN"].map(function(v){
+              return (
+                <button key={v} type="button" disabled={running||!bdate} onClick={function(){pickSession(v);}}
+                  className={"flex-1 rounded-xl border-2 px-4 py-3 text-sm font-bold transition-all disabled:opacity-50 "+(bsession===v?"border-indigo-400 bg-indigo-50 text-indigo-700":"border-gray-100 bg-white text-gray-600")}>
+                  {v==="FN"?"FN (Morning)":"AN (Afternoon)"}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
       {seatingPlansLoadWarning && (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
@@ -17338,10 +17582,86 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
 
               <div className="flex justify-end gap-2 pt-1">
                 <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-                <Btn variant="purple" onClick={startBatch} disabled={!selectedEligible.length}>Preview batch</Btn>
+                <Btn variant="purple" onClick={startBatch} disabled={!selectedEligible.length}>Choose halls</Btn>
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {stage==="halls" && hallPlan && (
+        <div className="space-y-4">
+          <div className="rounded-xl border-2 border-indigo-100 bg-indigo-50 p-4">
+            <div className="text-sm font-black text-indigo-800 mb-2">Step 2 · Choose halls — {bdate} · {bsession}</div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-700">
+              <div>Eligible students: <b>{hallPlan.totals.demand}</b></div>
+              <div>Selected halls: <b>{hallPlan.totals.selectedHalls}</b></div>
+              <div>Remaining seats: <b className={hallPlan.totals.remaining>0?"text-emerald-700":"text-red-600"}>{hallPlan.totals.remaining}</b></div>
+              <div>Status: <b className={hallPlan.totals.capacityStatus==="sufficient"?"text-emerald-700":hallPlan.totals.capacityStatus==="no_eligible"?"text-gray-500":"text-red-600"}>
+                {hallPlan.totals.capacityStatus==="sufficient"?"Sufficient":hallPlan.totals.capacityStatus==="no_eligible"?"No eligible students":"Insufficient"}</b></div>
+            </div>
+          </div>
+
+          {seatingPlansLoadWarning && (
+            <div className="rounded-xl border-2 border-red-300 bg-red-50 p-3 text-xs font-bold text-red-700">{seatingPlansLoadWarning} Generation is disabled until the plans reload.</div>
+          )}
+          {hallPlan.duplicates.length>0 && (
+            <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
+              <b>{hallPlan.duplicates.length}</b> student(s) appear in more than one selected exam (e.g. {hallPlan.duplicates.slice(0,3).map(function(d){return d.regno;}).join(", ")}). They are counted once here; the generator will refuse an impossible combined roster.
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Btn size="sm" variant="ghost" onClick={selectAllHalls}>Select all halls</Btn>
+            <Btn size="sm" variant="ghost" onClick={selectNoHalls}>Clear halls</Btn>
+            <span className="text-xs text-gray-400 ml-auto">{hallPlan.totals.selectedHalls} of {hallPlan.hallRows.length} selected</span>
+          </div>
+
+          {!hallPlan.hallRows.length ? (
+            <p className="text-sm text-gray-400 py-6 text-center">No halls are configured.</p>
+          ) : (
+            <div className="space-y-2 max-h-72 overflow-y-auto border border-gray-100 rounded-xl p-2">
+              {hallPlan.hallRows.map(function(r){
+                const dis=!r.selectable;
+                const on=selectedHalls.has(r.id)&&!dis;
+                return (
+                  <label key={r.id} className={"flex items-start gap-3 p-3 rounded-xl border "+(dis?"bg-gray-50 border-gray-100 opacity-70":on?"border-indigo-300 bg-indigo-50":"border-gray-100 bg-white")}>
+                    <input type="checkbox" disabled={dis} checked={on} onChange={function(){toggleHall(r.id);}} className="w-4 h-4 accent-indigo-600 cursor-pointer mt-0.5"/>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-gray-900">{r.name}</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600">{r.type}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-gray-500 mt-1">
+                        <span>usable <b>{r.usable}</b>/{r.physical}</span>
+                        <span>occupied <b>{r.occupied}</b></span>
+                        <span>remaining <b className={r.remaining>0?"text-emerald-600":"text-red-500"}>{r.remaining}</b></span>
+                        <span>~{r.eligible} eligible (est.)</span>
+                      </div>
+                      {dis && <div className="text-[11px] text-amber-700 font-bold mt-1">{r.reason}</div>}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-xs text-gray-700 space-y-0.5">
+            <div>Combined usable capacity: <b>{hallPlan.totals.combinedUsable}</b> · occupied in selection: <b>{hallPlan.totals.occupied}</b> · remaining: <b>{hallPlan.totals.remaining}</b></div>
+            <div>Students that can be accommodated: <b>{hallPlan.totals.canAccommodate}</b>{hallPlan.totals.shortfall>0 && <span> · estimated shortfall: <b className="text-red-600">{hallPlan.totals.shortfall}</b></span>}{hallPlan.totals.freeAfter>0 && <span> · spare seats after: <b className="text-emerald-600">{hallPlan.totals.freeAfter}</b></span>}</div>
+            <div className="text-[11px] text-gray-400">Capacity and eligibility are estimates; actual placement also depends on the seating rules.</div>
+          </div>
+
+          {hallPlan.validation.errors.length>0 && (
+            <div className="rounded-xl border-2 border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
+              {hallPlan.validation.errors.map(function(er,i){return <div key={i}>• {er}</div>;})}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Btn variant="ghost" onClick={function(){setStage("configure");}}>Back</Btn>
+            <Btn variant="purple" onClick={continueToPreview} disabled={!hallPlan.validation.ok}>Continue to preview</Btn>
+          </div>
         </div>
       )}
 
@@ -17350,11 +17670,18 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
           <div className="rounded-xl border-2 border-blue-100 bg-blue-50 p-4">
             <div className="text-sm font-black text-blue-800 mb-2">Batch preview</div>
             <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
-              <div>Date: <b>{bdate}</b></div>
+              <div>Date: <b>{bdate} · {bsession}</b></div>
               <div>Exams selected: <b>{selectedEligible.length}</b></div>
-              <div>Students (sum across exams): <b>{totalEligibleStudents}</b></div>
-              <div>Available seats (selected halls): <b>{totalCapacity}</b></div>
+              <div>Students (deduped): <b>{hallPlan?hallPlan.totals.demand:totalEligibleStudents}</b></div>
+              <div>Halls selected: <b>{hallPlan?hallPlan.totals.selectedHalls:0}</b></div>
+              <div>Free seats in selection: <b>{hallPlan?hallPlan.totals.remaining:totalCapacity}</b></div>
+              <div>Capacity status: <b className={hallPlan&&hallPlan.totals.capacityStatus==="sufficient"?"text-emerald-700":"text-red-600"}>{hallPlan?(hallPlan.totals.capacityStatus==="sufficient"?"Sufficient":"Insufficient"):"—"}</b></div>
             </div>
+            {hallPlan && hallPlan.totals.selectedHalls>0 && (
+              <div className="text-[11px] text-gray-500 mt-2">
+                Halls: {hallPlan.hallRows.filter(function(r){return r.selected;}).map(function(r){return r.name;}).join(", ")}
+              </div>
+            )}
           </div>
           {selectedEligible.some(function(r){return r.hasPlan;}) && (
             <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
@@ -17372,7 +17699,7 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
           )}
           <div className="text-xs text-gray-500">Active rules: <b>{activeRules.join(", ")||"None (standard sequential seating)"}</b></div>
           <div className="flex justify-end gap-2">
-            <Btn variant="ghost" onClick={function(){setStage("configure");}}>Back</Btn>
+            <Btn variant="ghost" onClick={function(){setStage("halls");}}>Back</Btn>
             <Btn variant="purple" onClick={function(){runBatch(selectedEligible.map(function(r){return r.exam;}), !skipExisting);}}>Confirm &amp; generate {selectedEligible.length} exam(s)</Btn>
           </div>
         </div>
@@ -17397,6 +17724,11 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
           <div className="text-xs text-gray-500">
             Total selected: <b>{report.summary.total}</b> · Students assigned: <b>{report.summary.assigned}</b> · Unplaced: <b>{report.summary.unplaced}</b> · Preserved existing plans: <b>{report.summary.preserved}</b> · Time: <b>{(report.summary.elapsedMs/1000).toFixed(1)}s</b>
           </div>
+          {hallSnapshotRef.current && (
+            <div className="text-xs text-gray-500">
+              Halls selected: <b>{hallSnapshotRef.current.totals.selectedHalls}</b> · Eligible (deduped): <b>{hallSnapshotRef.current.totals.demand}</b> · Free seats in the selection: <b>{hallSnapshotRef.current.totals.remaining}</b>{report.summary.unplaced>0 && <span> · <span className="text-red-600 font-bold">{report.summary.unplaced} student(s) could not be placed</span></span>}
+            </div>
+          )}
           <div className="space-y-1 max-h-56 overflow-y-auto border border-gray-100 rounded-xl p-2">
             {report.results.map(function(r){
               return (
@@ -24111,7 +24443,8 @@ const IS_DEV = (function () {
   try {
     const h = (window.location.hostname || "").toLowerCase();
     if (!h || h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0" || h === "[::1]") return true;
-    return /[?&](debug|dev)=1(?![0-9])/.test(window.location.search || "");
+    const q = (window.location.search || "") + (window.location.hash || "");
+    return /[?&](debug|dev)=1(?![0-9])/.test(q);
   } catch (e) { return false; }
 })();
 
@@ -24211,6 +24544,10 @@ function normalizePath(pathname) {
   if (p.charAt(0) !== "/") p = "/" + p;
   p = p.replace(/\/{2,}/g, "/");
   if (p.length > 1) p = p.replace(/\/+$/, "");
+  // A static dev server (VS Code Live Server) opened on the FILE exposes the
+  // document as "/index.html". That is the app entry, not a 404, so it maps to
+  // the root and the router then resolves the hash as usual.
+  if (/\/index\.html$/i.test(p)) p = p.replace(/\/index\.html$/i, "");
   return p === "" ? "/" : p;
 }
 
@@ -24232,11 +24569,15 @@ function matchPath(path) {
 }
 
 function readQueryParam(name) {
+  // The query string lives wherever the route lives (path on a fallback
+  // server, hash elsewhere), so this reads the location via routeFromLocation
+  // instead of window.location.search directly.
+  const q = routeFromLocation(window.location.pathname, window.location.search, window.location.hash, 0).search;
   try {
-    const s = new URLSearchParams(window.location.search || "");
+    const s = new URLSearchParams(q || "");
     return s.get(name) || "";
   } catch (e) {
-    const m = new RegExp("[?&]" + name + "=([^&]*)").exec(window.location.search || "");
+    const m = new RegExp("[?&]" + name + "=([^&]*)").exec(q || "");
     return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : "";
   }
 }
@@ -24260,14 +24601,57 @@ function initHistoryDepth() {
   } catch (e) { /* non-fatal: Back simply behaves like plain history */ }
 }
 
+// Pure router primitive: resolves the current route from the raw location
+// pieces. The route lives EITHER in the path (servers with an SPA fallback,
+// e.g. Netlify's `/* -> /index.html`) OR in the hash (any static host —
+// VS Code Live Server, GitHub Pages — which does not rewrite nested paths).
+// Whichever carries the route, the SAME route descriptor is produced, so the
+// rest of the app never reads `location` directly.
+function routeFromLocation(pathname, search, hash, depth) {
+  let raw = String(hash || "");
+  if (raw.charAt(0) === "#") raw = raw.slice(1);
+  let path, q, source;
+  if (raw.length > 0) {
+    const qi = raw.indexOf("?");
+    if (qi >= 0) { q = raw.slice(qi); raw = raw.slice(0, qi); }
+    else q = "";
+    path = normalizePath(raw);
+    source = "hash";
+  } else {
+    path = normalizePath(pathname || "/");
+    q = search || "";
+    source = "path";
+  }
+  return { source: source, path: path, search: q || "", raw: path + q, depth: depth || 0 };
+}
+
+// Pure router primitive: the canonical href for an internal navigation target.
+// The app MOVES around in root + hash form (`#/seating/hall-notice?date=X`), so
+// every target — path form, hash form or plain "/" — collapses to a URL that a
+// refresh or a fresh tab can load on ANY static host without an SPA fallback
+// (`http://host/` is always served, and the hash carries the route after it).
+// External targets pass through untouched for the caller to leave via.
+function canonicalInternalHref(to, origin) {
+  let u;
+  try { u = new URL(String(to == null ? "/" : to) || "/", origin); }
+  catch (e) { return { href: "/", routePart: "/", external: false }; }
+  if (u.origin !== origin) return { href: u.href, routePart: "", external: true };
+  const hash = (u.hash && u.hash.length > 1) ? u.hash.slice(1) : "";
+  const path = normalizePath(u.pathname);
+  const search = u.search || "";
+  const isBareRoot = path === "/" && !search && !hash;
+  const routePart = hash ? normalizePath(hash.split("?")[0]) + (hash.indexOf("?") >= 0 ? ("?" + hash.slice(hash.indexOf("?") + 1)) : "") : (path + search);
+  return { href: isBareRoot ? "/" : ("#" + routePart), routePart: routePart, external: false };
+}
+
 function buildRoute() {
-  const search = window.location.search || "";
-  const path   = normalizePath(window.location.pathname);
-  const match  = matchPath(path);
+  const r = routeFromLocation(window.location.pathname, window.location.search, window.location.hash, currentDepth());
+  const match = matchPath(r.path);
   return {
-    raw:      path + search,
-    path:     path,
-    search:   search,
+    raw:      r.raw,
+    path:     r.path,
+    search:   r.search,
+    source:   r.source,
     match:    match,
     page:     match ? match.page : "",
     params:   match ? match.params : {},
@@ -24288,16 +24672,15 @@ function notify() {
 function syncFromLocation() { _route = buildRoute(); notify(); }
 
 function resolveTarget(to) {
-  let u;
-  try { u = new URL(String(to == null ? "/" : to) || "/", window.location.origin); }
-  catch (e) { return { href: "/", external: false }; }
-  if (u.origin !== window.location.origin) return { href: u.href, external: true };
-  return { href: normalizePath(u.pathname) + (u.search || "") + (u.hash || ""), external: false };
+  return canonicalInternalHref(to, window.location.origin);
 }
 
 // Single entry point for all internal navigation. Uses pushState so normal
 // page-to-page moves create real history entries; "replace" is used only
 // where an entry would be meaningless (auth redirects, entry URL tidying).
+// Every internal target is written in root + hash form (canonicalInternalHref),
+// so the address bar path stays "/" and a refresh never hits a raw nested path
+// that a static server cannot serve.
 function navigate(to, opts) {
   const o = opts || {};
   const t = resolveTarget(to);
@@ -24307,8 +24690,7 @@ function navigate(to, opts) {
 
   // Already on this exact route: do not create a duplicate history entry,
   // otherwise Back would appear to "do nothing" for repeated clicks.
-  const noHash = t.href.split("#")[0];
-  if (noHash === _route.raw && !o.force) return;
+  if (t.routePart === _route.raw && !o.force) return;
 
   const d = currentDepth();
   try {
@@ -24343,7 +24725,7 @@ function safeNextPath(value) {
   if (raw.charAt(1) === "/") return "";
   const t = resolveTarget(raw);
   if (t.external) return "";
-  const bare = t.href.split("?")[0].split("#")[0];
+  const bare = t.routePart.split("?")[0].split("#")[0];
   const m = matchPath(bare);
   if (!m || m.isPublic || m.isRoot) return "";
   return t.href;
@@ -24653,6 +25035,11 @@ _route = buildRoute();
 // Back / Forward. This is what makes the browser buttons move between ExamOps
 // pages instead of leaving the site.
 window.addEventListener("popstate", syncFromLocation);
+
+// Hash changes are the canonical in-app navigation now (root + "#/route"), so
+// listen for them too — a manually typed/shared URL and Back/Forward between
+// hash routes both land here and re-sync the rendered page.
+window.addEventListener("hashchange", syncFromLocation);
 
 // Last-resort capture for faults that no React boundary can see. Errors are
 // recorded, never swallowed, and never allowed to blank the page.

@@ -121,11 +121,32 @@ const BULK_ENGINE = new Set([
   "bulkExamRows",
   "bulkSelectHalls",
   "bulkBuildHallUsedSeats",
+  "bulkSessionExams",
+  "bulkDedupeRoster",
+  "bulkHallOccupancy",
+  "bulkRoomsEligible",
+  "bulkHallSelectionData",
   "bulkGenerateOne",
   "runBulkSeatingCoSeated",
   "bulkYield",
   "bulkSummarize",
   "runBulkSeating",
+]);
+
+// The router's pure primitives. Route resolution is the part that must be
+// unit-testable without a browser: `routeFromLocation` turns raw location
+// pieces (path OR hash) into one route descriptor, and `canonicalInternalHref`
+// turns any internal target into the canonical root+hash href. Both are pure,
+// so the refresh/deep-link contract is asserted as plain functions. The runtime
+// wrappers that read `window` (buildRoute, resolveTarget, navigate, safeNextPath)
+// are deliberately NOT pulled in — they would drag a browser global into the
+// sandbox. PAGE_ROUTES and ROUTE_MATCHERS are upper-snake constants and load
+// eagerly, so matchPath resolves against the real tables.
+const ROUTER_ENGINE = new Set([
+  "normalizePath",
+  "matchPath",
+  "routeFromLocation",
+  "canonicalInternalHref",
 ]);
 
 // The exam-deletion path. These build the multi-location delete update from a
@@ -167,7 +188,8 @@ function load() {
   const bulkEngine = all.filter((n) => BULK_ENGINE.has(n) && !isJsx(n));
   const deleteEngine = all.filter((n) => DELETE_ENGINE.has(n) && !isJsx(n));
   const noticeEngine = all.filter((n) => NOTICE_ENGINE.has(n) && !isJsx(n));
-  const names = [...new Set([...shared, ...catFns, ...engine, ...loadEngine, ...bulkEngine, ...deleteEngine, ...noticeEngine])];
+  const routerEngine = all.filter((n) => ROUTER_ENGINE.has(n) && !isJsx(n));
+  const names = [...new Set([...shared, ...catFns, ...engine, ...loadEngine, ...bulkEngine, ...deleteEngine, ...noticeEngine, ...routerEngine])];
   const needed = names.filter((n) => !fns[n]);
   if (needed.length) throw new Error("could not extract: " + needed.join(", "));
 
