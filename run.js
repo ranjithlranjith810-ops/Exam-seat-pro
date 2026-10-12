@@ -32,6 +32,7 @@ const suites = [
   require("./hall_notice_layout.test.js"),
   require("./seating_grid_consistency.test.js"),
   require("./nav_routing.test.js"),
+  require("./github_pages_routing.test.js"),
   require("./hall_selection.test.js"),
 ];
 report(suites).then((fail) => process.exit(fail ? 1 : 0));

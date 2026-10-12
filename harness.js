@@ -147,6 +147,9 @@ const ROUTER_ENGINE = new Set([
   "matchPath",
   "routeFromLocation",
   "canonicalInternalHref",
+  // The GitHub Pages project-base strip: pure, so the subpath entry case can be
+  // asserted with an explicit hostname instead of a browser `location`.
+  "stripProjectBase",
 ]);
 
 // The exam-deletion path. These build the multi-location delete update from a

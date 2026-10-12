@@ -24601,6 +24601,23 @@ function initHistoryDepth() {
   } catch (e) { /* non-fatal: Back simply behaves like plain history */ }
 }
 
+// GitHub Pages project sites are served under "/<repo>/" and have no SPA
+// rewrite, so the route is carried in the hash once the app is running. The
+// ONLY path-form value a Pages visitor can arrive with is the project base
+// itself ("/Exam-seat-pro/" or "/Exam-seat-pro"), which must normalise to "/"
+// so the app's root guard can tidy it to the landing page. Scoped to the exact
+// Pages host + repo, so Netlify, a custom domain, localhost, or a user/org
+// Pages site served from the root are never affected.
+const GH_PAGES_HOST = "ranjithlranjith810-ops.github.io";
+const GH_PAGES_BASE = "/Exam-seat-pro";
+function stripProjectBase(pathname, hostname) {
+  const p = pathname || "/";
+  if (String(hostname || "").toLowerCase() !== GH_PAGES_HOST) return p;
+  if (p === GH_PAGES_BASE || p === GH_PAGES_BASE + "/") return "/";
+  if (p.indexOf(GH_PAGES_BASE + "/") === 0) return p.slice(GH_PAGES_BASE.length);
+  return p;
+}
+
 // Pure router primitive: resolves the current route from the raw location
 // pieces. The route lives EITHER in the path (servers with an SPA fallback,
 // e.g. Netlify's `/* -> /index.html`) OR in the hash (any static host —
@@ -24618,7 +24635,11 @@ function routeFromLocation(pathname, search, hash, depth) {
     path = normalizePath(raw);
     source = "hash";
   } else {
-    path = normalizePath(pathname || "/");
+    // `location` is read defensively so this primitive stays pure (the test
+    // harness evaluates it without a browser); the hostname only ever enables
+    // the Pages project-base strip above.
+    const hostname = (typeof location !== "undefined" && location) ? (location.hostname || "") : "";
+    path = normalizePath(stripProjectBase(pathname || "/", hostname));
     q = search || "";
     source = "path";
   }
