@@ -43,6 +43,7 @@ const SEATING_ENGINE = new Set([
   "adjacencyImpossibility",
   "manualRuleGate",
   "interleaveByDepartment",
+  "canonicalDept",
 ]);
 
 // The hall-notice integrity path. Pure functions over plain objects — nothing

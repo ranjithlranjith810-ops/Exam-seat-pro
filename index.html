@@ -662,8 +662,7 @@ window._buildSeatingExportHTML = function(exam, plan, college, students) {
 
   function resolveDept(s) {
     if (!s) return "";
-    var fn = window.inferDeptFromRegno || function(){ return ""; };
-    return (s.dept && s.dept!=="GEN") ? s.dept : (fn(s.regno)||s.dept||"");
+    return canonicalDept(s.dept);
   }
 
   const hallPages = Object.values(plan).map(hp => {
@@ -2678,7 +2677,10 @@ function gnCompactRegnos(list) {
 // like the allocator does.
 function gnDeptFor(rows, code) {
   for (let i = 0; i < (rows || []).length; i++) {
-    if (rows[i].subj === code && rows[i].dept && rows[i].dept !== "GEN") return rows[i].dept;
+    if (rows[i].subj === code) {
+      const d = canonicalDept(rows[i].dept);
+      if (d !== "GEN") return d;
+    }
   }
   return "GEN";
 }
@@ -4317,8 +4319,14 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
   // department, physical coordinates, saved seat label) so a retro-filled seat is
   // byte-equivalent to a seat placed by the main scan and passes integrity checks.
   function makeSlot(st, hall, ci, ri, si, benchNo, seatNo) {
-    const enrichedDept = st.dept && st.dept !== "GEN"
-      ? st.dept : (inferDeptFromRegno(st.regno) || st.dept || "GEN");
+    // The student's OWN stored department — never guessed from the register number.
+    // The value is preserved exactly as stored (the allocator and the validator
+    // both compare departments case-insensitively, so folding aliases here would
+    // change which seats are considered the same department). A genuinely unknown
+    // department is stored as "GEN"; the seat card / header / notice resolve the
+    // canonical spelling for display via canonicalDept().
+    const stDept = st.dept == null ? "" : String(st.dept);
+    const enrichedDept = stDept.trim() === "" ? "GEN" : st.dept;
     return {
       ...st, dept: enrichedDept,
       seatNo: seatNo,
@@ -4960,7 +4968,7 @@ function bulkBuildLookups(students, exams, halls) {
   for (const s of (students || [])) {
     if (s && s.regno != null) studentsByRegno.set(String(s.regno), s);
     if (s) {
-      const key = String(s.dept == null ? "" : s.dept).toUpperCase() + "|" + String(s.year == null ? "" : s.year);
+      const key = canonicalDept(s.dept) + "|" + String(s.year == null ? "" : s.year);
       if (!studentsByDeptYear.has(key)) studentsByDeptYear.set(key, []);
       studentsByDeptYear.get(key).push(s);
     }
@@ -4985,13 +4993,13 @@ function bulkExamStudents(exam, students, lookups) {
   const groups = exam.groups || [];
   for (const g of groups) {
     if (!g || !g.dept) continue;
-    const dept = String(g.dept).toUpperCase();
+    const dept = canonicalDept(g.dept);
     const yr = examGroupYear(g);
     let bucket = lookups && lookups.studentsByDeptYear
       ? lookups.studentsByDeptYear.get(dept + "|" + yr) : null;
     if (!bucket) {
       bucket = (students || []).filter(function (s) {
-        return String(s.dept == null ? "" : s.dept).toUpperCase() === dept && String(s.year) === yr;
+        return canonicalDept(s.dept) === dept && String(s.year) === yr;
       });
     }
     for (const s of bucket) {
@@ -6306,8 +6314,7 @@ function BenchLayout({ hall, highlightRegNo=null, examName="" }) {
 
   function resolveDept(seat) {
     if (!seat) return "";
-    return (seat.dept && seat.dept !== "GEN")
-      ? seat.dept : (inferDeptFromRegno(seat.regno) || seat.dept || "");
+    return canonicalDept(seat.dept);
   }
 
   // Column color schemes — one per column A,B,C,...
@@ -6375,7 +6382,7 @@ function BenchLayout({ hall, highlightRegNo=null, examName="" }) {
   // ── Dept/Year/Gender breakdown cards ──
   const deptCounts = {}, yearCounts = {}, genderCounts = {male:0,female:0};
   (hall.seats||[]).forEach(function(s){
-    var d = (s.dept && s.dept!=="GEN") ? s.dept : (inferDeptFromRegno(s.regno)||s.dept||"GEN");
+    var d = canonicalDept(s.dept);
     deptCounts[d] = (deptCounts[d]||0) + 1;
     yearCounts[s.year] = (yearCounts[s.year]||0) + 1;
     genderCounts[s.gender] = (genderCounts[s.gender]||0) + 1;
@@ -21726,6 +21733,41 @@ function inferDeptFromRegno(regno) {
   } catch(e) { return ""; }
 }
 window.inferDeptFromRegno = inferDeptFromRegno;
+
+// ── CANONICAL DEPARTMENT ─────────────────────────────────────────────────────
+// The ONE department value the whole app agrees on. The seat card, the hall
+// header totals, the printable notices and exam-to-roster matching all resolve a
+// stored department through this function, so they can never disagree with each
+// other. It folds the equivalent AIDS spellings together and normalises case and
+// stray whitespace, but it NEVER invents a department: a blank value becomes
+// "GEN" and an unrecognised value is only trimmed/upper-cased. In particular it
+// does NOT guess a department from the register number — that import-time
+// inference (inferDeptFromRegno, above) stays in the importers and is never
+// applied to a plan that has already been created. AIDS and AIML stay DISTINCT:
+// they are different departments and are never merged.
+// Every alias below is taken verbatim from the project's existing import maps
+// (CURRI_DEPT_ALIASES / CURRI_JSON_DEPT_ALIASES) so display agrees with import;
+// none is speculative and AIDS is never merged with AIML.
+const DEPT_CANON_ALIASES = {
+  "AID S": "AIDS", "AI DS": "AIDS", "AI&DS": "AIDS", "AI & DS": "AIDS",
+  "AI AND DS": "AIDS", "AI AND DATA SCIENCE": "AIDS", "AI DATA SCIENCE": "AIDS",
+  "AI & DATA SCIENCE": "AIDS", "AI&DS ENGINEERING": "AIDS", "AIDS ENGINEERING": "AIDS",
+  "ARTIFICIAL INTELLIGENCE AND DATA SCIENCE": "AIDS",
+  "ARTIFICIAL INTELLIGENCE DATA SCIENCE": "AIDS",
+  "AIML": "AIML", "AI ML": "AIML", "AI AND ML": "AIML",
+  "ARTIFICIAL INTELLIGENCE AND MACHINE LEARNING": "AIML",
+  "ARTIFICIAL INTELLIGENCE MACHINE LEARNING": "AIML",
+  "GENERAL": "GEN", "GEN": "GEN", "": "GEN",
+};
+function canonicalDept(dept) {
+  var raw = String(dept == null ? "" : dept).replace(/\s+/g, " ").trim().toUpperCase();
+  if (!raw) return "GEN";
+  if (Object.prototype.hasOwnProperty.call(DEPT_CANON_ALIASES, raw)) return DEPT_CANON_ALIASES[raw];
+  var compact = raw.replace(/[\s&]+/g, "");
+  if (Object.prototype.hasOwnProperty.call(DEPT_CANON_ALIASES, compact)) return DEPT_CANON_ALIASES[compact];
+  return raw;
+}
+window.canonicalDept = canonicalDept;
 
 function parseAttendancePDF(pages) {
   var results = [];

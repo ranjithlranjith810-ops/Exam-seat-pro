@@ -33,5 +33,6 @@ const suites = [
   require("./seating_grid_consistency.test.js"),
   require("./nav_routing.test.js"),
   require("./hall_selection.test.js"),
+  require("./dept_canonical.test.js"),
 ];
 report(suites).then((fail) => process.exit(fail ? 1 : 0));
