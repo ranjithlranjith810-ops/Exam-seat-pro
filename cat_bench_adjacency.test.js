@@ -151,23 +151,33 @@ it("T3: a same-dept seat with another seat between is not treated as adjacent", 
 // A second department is included so benchAdjacency is genuinely ACTIVE for this
 // test — with a single department it would switch itself off (T6) and prove
 // nothing about row comparison.
+// COLUMN-WISE MODE (approved design): this single-slot-column hall has exactly
+// one vertical column, which the allocator assigns to ONE department. CSE owns
+// it (2 of 3 rows), so the ECE is genuinely stranded: seating it would place a
+// second department inside the CSE column. Strict purity leaves A3.1 EMPTY and
+// reports the ECE unplaced instead of silently mixing the column.
 it("T4: rows are never compared (A1.1 and A2.1 both CSE is fine)", () => {
   const students = [
     stu(1, "CSE", 2, "male"), stu(2, "CSE", 2, "male"), stu(3, "ECE", 2, "male"),
   ];
   const res = place(students, [hall("h1", "Hall A", 3, [1])], 0, {}, CAT_RULES);
   const seats = seatsOf(res);
-  eq(res.unplaced.length, 0, "no student was unplaced");
+  eq(res.unplaced.length, 1, "the single-column hall strands the ECE (no pure column left for a second dept)");
+  eq(res.unplaced[0].student.dept, "ECE", "the stranded student is the ECE");
+  ok(res.unplaced[0].reason.indexOf("capacity") >= 0, "honest reason: the hall has no free PURE column left (got: " + res.unplaced[0].reason + ")");
   eq(deptAt(seats, "A1.1"), "CSE", "A1.1");
   eq(deptAt(seats, "A2.1"), "CSE", "A2.1 directly behind A1.1");
-  eq(deptAt(seats, "A3.1"), "ECE", "A3.1");
+  eq(deptAt(seats, "A3.1"), "", "A3.1 stays empty — never a different department in the CSE column");
   eq(validate(res.plan, CAT_RULES).length, 0, "front-to-back same-dept is not a violation");
 });
 
-// ── T5: facing seats across benches ARE checked ─────────────────────────────
+// ── T5: facing seats across benches ARE checked (and now genuinely exercised) ──
 //
 // A 1-wide bench A followed by a 3-wide bench B: B1.1 faces A1.1, while B1.2 and
-// B1.3 face nothing.
+// B1.3 face nothing. COLUMN-WISE largest-first commits A1.1 to the larger
+// demand (ECE, 2) and B1.1 to the next dept — the second ECE is REFUSED at B1.1
+// because that seat faces the ECE at A1.1, so CSE back-fills B1.1 and the second
+// ECE lands at B1.2 (beside CSE). B1.3 stays empty: every student is seated.
 it("T5: the leftmost slot of a bench faces the previous bench's rightmost seat", () => {
   const students = [
     stu(1, "CSE", 2, "male"), stu(2, "ECE", 2, "male"), stu(3, "ECE", 2, "male"),
@@ -175,10 +185,10 @@ it("T5: the leftmost slot of a bench faces the previous bench's rightmost seat",
   const res = place(students, [hall("h1", "Hall A", 1, [1, 3])], 0, {}, CAT_RULES);
   const seats = seatsOf(res);
   eq(res.unplaced.length, 0, "everyone placed");
-  eq(deptAt(seats, "A1.1"), "CSE", "A1.1 CSE");
-  eq(deptAt(seats, "B1.1"), "ECE", "B1.1 ECE — it faces A1.1, which is CSE");
-  eq(deptAt(seats, "B1.2"), "", "B1.2 is empty — it is beside B1.1, also ECE");
-  eq(deptAt(seats, "B1.3"), "ECE", "B1.3 takes the second ECE");
+  eq(deptAt(seats, "A1.1"), "ECE", "A1.1 ECE — the largest demand owns the first column");
+  eq(deptAt(seats, "B1.1"), "CSE", "B1.1 CSE — the second ECE is refused here because it FACES the ECE at A1.1");
+  eq(deptAt(seats, "B1.2"), "ECE", "B1.2 ECE — beside a CSE, so the second ECE is legal here");
+  eq(deptAt(seats, "B1.3"), "", "B1.3 stays empty — every student is already seated");
 });
 
 // ── T6: single-department papers are exempt, never mass-unplaced ────────────

@@ -154,16 +154,18 @@ it("D1: same-department side-by-side is still blocked (allocator untouched)", ()
     "CSE is separated by the ECE seat: " + seats.map((x) => x.dept).join(","));
 });
 
-// ── D2: CHARACTERIZATION — one displayed label, two raw department values ────
-// DOCUMENTED LIMITATION (pinned, not fixed). The allocator and the validator
-// identify a department by its RAW stored value, so "AID S" and "AIDS" are TWO
-// different departments to them and may legally sit side-by-side. Display folds
-// both to the single label "AIDS", so such a pair can show the SAME department
-// beside itself. Making the allocator treat them as one department would mean
-// changing its department identity (placement / round-robin / noSameDept), which
-// is deliberately out of scope for this patch. This test records the current
-// behaviour so any future change to that identity is caught.
-it("D2: AID S and AIDS display as one label but are two raw depts to the allocator", () => {
+// ── D2: CHARACTERIZATION — one displayed label, one canonical department ────
+// Column-wise department separation (approved design) identities a department
+// by its CANONICAL value, so "AID S" and "AIDS" are now ONE department to the
+// allocator: they never share a VERTICAL column as two internally-mixed halves,
+// and with equal remaining demand (1 each here) the deterministic tie-break
+// seats the alias spellings into consecutive single-seat columns — AID S, AIDS,
+// MECH. The allocator's RAW (case-insensitive) string comparison means the two
+// spellings may sit ADJACENT to each other; that is deliberate and shared by
+// validatePlan, so the plan is clean. Display folds both to the single label
+// "AIDS", and each seat keeps the RAW stored value. This test records the
+// resulting behaviour so any future change to that identity is caught.
+it("D2: AID S and AIDS display as one label AND are one canonical department to the allocator", () => {
   const res = api.placeStudentsInHalls([
     { id: 1, regno: "953021243001", name: "1", dept: "AID S", year: 2, gender: "male" },
     { id: 2, regno: "953021243002", name: "2", dept: "AIDS", year: 2, gender: "male" },
@@ -171,18 +173,39 @@ it("D2: AID S and AIDS display as one label but are two raw depts to the allocat
   ], [hall("h1", 1, [3])], 0, {}, CAT_RULES);
   const seats = seatsOf(res).sort((a, b) => a.slot - b.slot);
   eq(seats.length, 3, "all three seated");
-  // The allocator keeps the two spellings as distinct raw values…
+  // The allocator keeps the two spellings as distinct raw values on the seats…
   eq(seats[0].dept, "AID S", "raw value kept for the first alias");
   eq(seats[1].dept, "AIDS", "raw value kept for the second alias");
+  eq(seats[2].dept, "MECH", "MECH owns the trailing single-seat column");
   // …yet both render as the one department "AIDS".
   eq(api.canonicalDept(seats[0].dept), "AIDS", "first alias displays as AIDS");
   eq(api.canonicalDept(seats[1].dept), "AIDS", "second alias displays as AIDS");
-  // They are adjacent on the same bench and the allocator raises NO violation:
-  // to it they are different departments, so the same label sits side-by-side.
-  eq(seats[0].bench, seats[1].bench, "the two spellings share a bench");
-  eq(seats[1].slot - seats[0].slot, 1, "and occupy adjacent seats");
+  // Canonical identity: each single-seat column is one canonical department. The
+  // alias spellings may be ADJACENT because the engine compares departments
+  // case-insensitively on the raw value (deliberate — see index.html's legalFor
+  // comment); validatePlan uses the same comparison, so this stays clean.
   eq(api.validatePlan(res.plan, CAT_RULES).length, 0,
-    "allocator sees two different depts: no side-by-side violation");
+    "one canonical dept: the plan is a pure single-student column set with no adjacency violation");
+});
+
+// ── M4: the CAT preview/import matcher folds aliases too ─────────────────────
+// catGroupStudents is the roster resolver the CAT timetable import and the
+// single-exam generate flow share. It must fold both sides through canonicalDept
+// like bulkExamStudents, or the AIDS exams (whose section key "AI & DS" is folded
+// to "AIDS") match nobody when the roster spells the department "AI & DS"/"AID S".
+it("M4: catGroupStudents folds aliases on both sides and keeps AIML distinct", () => {
+  const roster = [
+    { id: 1, regno: "953021243001", dept: "AI & DS", year: 2, gender: "male" },
+    { id: 2, regno: "953021243002", dept: "AID S", year: 3, gender: "male" },
+    { id: 3, regno: "953021243003", dept: "AIDS", year: 2, gender: "male" },
+    { id: 4, regno: "953021243004", dept: "AIML", year: 2, gender: "male" },
+  ];
+  eq(api.catGroupStudents({ dept: "AIDS", sem: "03", year: "2" }, roster, null).map((x) => x.id).sort(), [1, 3]);
+  eq(api.catGroupStudents({ dept: "AIDS", sem: "05", year: "3" }, roster, null).map((x) => x.id), [2]);
+  // A group written with the JSON spelling matches the canonical roster too.
+  eq(api.catGroupStudents({ dept: "AI & DS", sem: "03", year: "2" }, [{ id: 9, dept: "AIDS", year: 2 }], null).map((x) => x.id), [9]);
+  // A blank/GEN student is never swept into an AIDS exam.
+  eq(api.catGroupStudents({ dept: "AIDS", sem: "03", year: "2" }, [{ id: 8, dept: "", year: 2, regno: "x" }], null).length, 0);
 });
 
 module.exports = s;

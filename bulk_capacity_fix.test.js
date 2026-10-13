@@ -151,32 +151,50 @@ it("a generated hall entry's capacity equals the hall's usable capacity", () => 
 it("REPRO: capacity overflow where adjacency is impossible is reported as CAPACITY, not as the rule", () => {
   // Single-column hall: no row ever has a left neighbour and no bench faces the
   // previous one, so No-Same-Department cannot reject ANY seat. Roster 16 AID S
-  // + 45 MECH = 61 students, hall declared 45. The OLD code blamed the rule here
-  // ("No legal seat satisfies the active rules…"); the corrected engine says
-  // capacity — which is what actually happened.
+  // + 45 MECH = 61 students, hall declared 45. COLUMN-WISE MODE (approved
+  // design) makes this a single vertical column assigned to ONE department, and
+  // largest-remaining-demand-first gives it to MECH (45 > 16): the hall's 45
+  // usable rows fill with MECH, and every AID S student is honestly reported —
+  // the hall has no capacity left inside its PURE column. The reason is
+  // capacity, which is what actually happened — never a rule claim.
   const h45 = hall("lh1", 54, [1], 45);   // 54 single-seat rows, declared 45
   const roster = students(16, "AID S", 1).concat(students(45, "MECH", 1));
   const res = api.placeStudentsInHalls(roster, [h45], 0, {}, { splitGender: false, noSameDept: true, noSameYear: false });
-  eq(res.plan[h45.id].seats.length, 45, "exactly the declared 45 are seated");
-  eq(res.unplaced.length, 16);
+  eq(res.plan[h45.id].seats.length, 45, "the MECH pure column fills all 45 usable slots (16 of the 45 slots is the OLD round-robin outcome)");
+  eq(new Set(res.plan[h45.id].seats.map(function (x) { return x.dept; })).size, 1,
+    "the single column holds exactly one department");
+  eq(res.unplaced.length, 16, "the 16 AID S students are honestly reported unplaced");
+  eq(res.unplaced.every(function (u) { return (u.student || u).dept === "AID S"; }), true,
+    "the stranded side is the smaller demand");
   ok(res.unplaced[0].reason.indexOf("capacity") >= 0, "reason names capacity: " + res.unplaced[0].reason);
   ok(res.unplaced[0].reason.indexOf("No legal seat") < 0, "reason does NOT blame the rule");
 });
 
 it("a genuine adjacency block is still reported as the rule", () => {
-  // [2,3] single-row hall: bench A is 2 slots, bench B is 3 slots, and B1.1
-  // faces the rightmost seat of bench A (A1.2). Under noSameDept four seats
-  // fill as CSE, ECE, CSE, ECE — but B1.3 sits beside the ECE at B1.2 and the
-  // only remaining student is the FIFTH ECE, so B1.3 is genuinely stranded by
-  // the RULE with a free seat left over. Back-fill repairs the old forward-scan
-  // gaps elsewhere, but it cannot conjure a department that is not in the
-  // roster, and the reason must still name the rule, not capacity.
+  // Scene A — [2,3] single-row hall, bench A is 2 slots and bench B is 3 slots.
+  // Largest-first now seats ALL of 2 CSE + 3 ECE (CSE back-fills every seat the
+  // alternation frees), where the round-robin cursor stranded the final ECE.
+  // This is a legality improvement, not a looser rule: the plan is validated
+  // clean. Scene B keeps the original regression intent — a genuine rule block
+  // with a free seat left over MUST still name the rule, never capacity.
   const hh = hall("h1", 1, [2, 3]);
   const roster = students(2, "CSE", 1).concat(students(3, "ECE", 1));
   const res = api.placeStudentsInHalls(roster, [hh], 0, {}, { splitGender: false, noSameDept: true, noSameYear: false });
-  eq(res.plan[hh.id].seats.length, 4, "four legal non-adjacent seats are used");
-  eq(res.unplaced.length, 1, "the rule genuinely strands the remaining ECE");
-  ok(res.unplaced[0].reason.indexOf("No legal seat") >= 0, "reason blames the rule: " + res.unplaced[0].reason);
+  eq(res.plan[hh.id].seats.length, 5, "all five legal non-adjacent seats are used");
+  eq(res.unplaced.length, 0, "no one is stranded on this balanced roster");
+  eq(api.validatePlan(res.plan, { splitGender: false, noSameDept: true, noSameYear: false }).length, 0,
+    "the fully-seated plan is still clean");
+
+  // Scene B — [2,3] same hall, 5 MECH + 1 CSE: MECH fills A1.1, CSE back-fills
+  // A1.2, MECH takes B1.1 and B1.3, but B1.2 sits beside B1.1 (MECH) so a MECH
+  // can never start there and the CSE is exhausted — two MECH stay stranded with
+  // a legal seat free. The reason must name the RULE.
+  const hb = hall("h1", 1, [2, 3]);
+  const rosterB = students(5, "MECH", 1).concat(students(1, "CSE", 1));
+  const resB = api.placeStudentsInHalls(rosterB, [hb], 0, {}, { splitGender: false, noSameDept: true, noSameYear: false });
+  eq(resB.plan[hb.id].seats.length, 4, "four legal seats fill (A1.1 MECH, A1.2 CSE, B1.1 MECH, B1.3 MECH)");
+  eq(resB.unplaced.length, 2, "the rule genuinely strands the remaining MECH students");
+  ok(resB.unplaced[0].reason.indexOf("No legal seat") >= 0, "reason blames the rule: " + resB.unplaced[0].reason);
 });
 
 // ── 5. config-error surfacing in the bulk rows ─────────────────────────────────
@@ -193,8 +211,8 @@ it("bulkExamRows reports a hall whose declared capacity exceeds its physical inv
   eq(rows[0].hallCapacity, 36, "row capacity is the bounded usable value");
 });
 
-// ── 6. REPRO: the reported 14-10-2026 batch — 13 saved, 1 failed, 16 unplaced ──
-ait("REPRO: 14-10-2026 Bulk Seating — 13 saved, 1 failed, 16 unplaced, truthful capacity reason", async () => {
+// ── 6. REPRO: the reported 14-10-2026 batch — 13 saved, 1 failed, unplaced ────
+ait("REPRO: 14-10-2026 Bulk Seating — 13 saved, 1 failed, 45 unplaced, truthful capacity reason", async () => {
   const FN = "14-10-2026";
   // LH-1: declared 45, physical 54 (single-column so adjacency cannot reject).
   const lh1 = hall("lh1", 54, [1], 45);
@@ -257,12 +275,18 @@ ait("REPRO: 14-10-2026 Bulk Seating — 13 saved, 1 failed, 16 unplaced, truthfu
 
   eq(res.summary.completed, 13, "13 exams saved");
   eq(res.summary.failed, 1, "exactly 1 exam failed");
-  eq(res.summary.unplaced, 16, "16 students unplaced");
+  // COLUMN-WISE MODE + largest-remaining-demand-first: LH-1's single vertical
+  // column is one department, and the bigger demand (MECH 45 > AID S 16) owns
+  // it, so the hall fills to its declared 45 with MECH and all 16 AID S are
+  // honestly unplaced — the stranded side is now the SMALLER department.
+  eq(res.summary.unplaced, 16, "16 students unplaced (the AID S side of the single-column hall)");
   const failed = res.results.filter(function (r) { return r.status === "failed"; });
   eq(failed.length, 1);
   ok(failed[0].reason.indexOf("Hall capacity exhausted") >= 0, "failure names capacity: " + failed[0].reason);
   ok(failed[0].reason.indexOf("No legal seat") < 0, "failure no longer blames the adjacency rule");
   eq((failed[0].unplaced || []).length, 16);
+  eq((failed[0].unplaced || []).every(function (u) { return (u.dept || (u.student && u.student.dept)) === "AID S"; }), true,
+    "the unplaced students are the smaller-demand AID S side");
   ok(saved.length === 13 && saved.indexOf("big") < 0, "the oversized exam is never saved");
 });
 

@@ -374,4 +374,28 @@ it("a row with an unusable date is blocked by the shared validation gate", () =>
   eq(row.ready, false);
 });
 
+// ── 17. AIDS roster matched under any alias spelling ─────────────────────────
+// Bug pinned here: the timetable's JSON key is "AI & DS" and is folded to the
+// canonical code "AIDS" when the section is resolved, but the student matcher
+// compared the raw strings. A roster still spelling the department "AI & DS"
+// therefore matched NEITHER AIDS exam (Data Structures, Big Data Analytics)
+// while every other department seated normally. The matcher now folds both
+// sides through canonicalDept, exactly as the bulk seating engine already does.
+it("matches both AIDS exams when the roster spells the department 'AI & DS'", () => {
+  const roster = [
+    { regno: "A1", dept: "AI & DS", year: "2", gender: "male" },
+    { regno: "A2", dept: "AI & DS", year: "3", gender: "male" },
+  ];
+  const ctx = { ...CTX, students: roster };
+  const plan = api.catJsonPlan(DATA, ctx, {});
+  const res = api.catJsonSectionsToResults("t.json", plan, ctx);
+  const aids = res.find((r) => r.name.indexOf("AIDS") >= 0);
+  const ds = aids.preview.rows.find((r) => r.subCode === "CS25C08");
+  const bda = aids.preview.rows.find((r) => r.subCode === "CCS334");
+  eq(ds.studentCount, 1, "Data Structures (II year) matched");
+  eq(bda.studentCount, 1, "Big Data Analytics (III year) matched");
+  eq(ds.students.map((x) => x.regno), ["A1"]);
+  eq(bda.students.map((x) => x.regno), ["A2"]);
+});
+
 module.exports = s;

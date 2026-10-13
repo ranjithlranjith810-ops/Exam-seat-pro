@@ -1920,7 +1920,155 @@ function auditHallNoticeCollisions(exams, seatingPlans, halls) {
   return { sharedCombos: shared, seatOverlaps: overlaps, generatedAt: new Date().toISOString() };
 }
 
-function hallNoticesGroup(exams, seatingPlans, halls, fDate, fSession, fHall) {
+// ── SHARED NOTICE HEADING + ACADEMIC-YEAR RESOLUTION ──────────────────────────
+// The HALL NOTICE PROFORMA and the GLOBAL NOTICE must print the SAME heading, so
+// ONE resolver (`resolveNoticeHeading`) is the single title source for both
+// documents. The official CAT heading ("CAT-II 2026–2027 ODD [II, III & IV Year]")
+// is read verbatim from the college's shared exam-title setting (or a per-call
+// override); when that is blank it is DERIVED from exam metadata only — the exam
+// category label, the exam date and the exam-group semesters — never from a
+// register number, and never hard-coded for a specific exam type. Missing or
+// ambiguous metadata falls back safely and is reported as a warning, so a notice
+// can never be silently mislabelled.
+
+const HN_YEAR_ROMAN = { "1": "I", "2": "II", "3": "III", "4": "IV" };
+function hnYearRoman(year) {
+  return HN_YEAR_ROMAN[String(year == null ? "" : year).trim()] || "";
+}
+// regno → student roster index. Exact identification only — the year is never
+// guessed from a register-number prefix.
+function hnIndexStudents(students) {
+  const m = {};
+  (students || []).forEach(function(s) {
+    if (!s || s.regno == null) return;
+    const k = String(s.regno).trim();
+    if (k && !m[k]) m[k] = s;
+  });
+  return m;
+}
+// An exam's curriculum group for a department: the semester/year information lives
+// on the saved exam groups (`.sem` / `.semester` / `.year`), never on a regno.
+function hnExamDeptSem(exam) {
+  const m = {};
+  ((exam && exam.groups) || []).forEach(function(g) {
+    const dk = canonicalDept(g && g.dept);
+    if (!dk || dk === "GEN" || m[dk]) return;
+    const sem = String(examGroupSem(g) || "").replace(/[^0-9]/g, "");
+    if (sem) m[dk] = sem;
+  });
+  return m;
+}
+// Academic year for an exam date, on the Aug→Jul academic cycle both notices use:
+// 2026-10-14 → "2026–2027", 2026-03-10 → "2025–2026". Derives from the date only.
+function hnAcademicYearOf(dateStr) {
+  const m = String(dateStr == null ? "" : dateStr).match(/(\d{4})-(\d{2})/);
+  if (!m) return "";
+  const y = parseInt(m[1], 10), mon = parseInt(m[2], 10);
+  return mon >= 8 ? (y + "\u2013" + (y + 1)) : ((y - 1) + "\u2013" + y);
+}
+// ODD/EVEN classification + distinct roman years from a set of group semesters.
+function hnSemesterTag(sems) {
+  const years = [], parity = {};
+  (sems || []).forEach(function(sem) {
+    const n = parseInt(String(sem == null ? "" : sem).replace(/[^0-9]/g, ""), 10);
+    if (isNaN(n) || n < 1 || n > 8) return;
+    parity[n % 2 === 1 ? "ODD" : "EVEN"] = true;
+    const r = hnYearRoman(curriSemToYear(String(n)));
+    if (r && years.indexOf(r) < 0) years.push(r);
+  });
+  years.sort(function(a, b) { return HN_YEAR_ROMAN[a] - HN_YEAR_ROMAN[b]; });
+  const p = Object.keys(parity);
+  return { classification: p.length === 1 ? p[0] : "", years: years };
+}
+// Short heading token for an exam from its saved category metadata. CAT-ish
+// labels keep their printed marker ("CAT-2" / "Test-II" / "CAT II EXAMINATIONS"
+// all read "CAT-II"); University and Practical labels get their classic tokens;
+// anything unrecognised reads "" (which falls back to the legacy NOV/DEC line).
+function hnNoticeTypeToken(exam) {
+  if (!exam) return "";
+  const raw = String((exam.examCategory != null ? exam.examCategory : exam.category) || "").trim();
+  const catish = String(exam.category || "") === "CAT" || /\b(A|C)?CAT\b/i.test(raw) || /\b(ASSESSMENT|TEST)\b/i.test(raw);
+  if (catish) {
+    const m = String(raw).match(/\b(?:CAT|TEST|ASSESSMENT|EXAM(?:INATIONS?)?)\s*[-–—: ]*([IVXL]{1,4}|\d{1,2})\b/i);
+    let marker = "";
+    if (m) {
+      if (/^\d/.test(m[1])) marker = HN_YEAR_ROMAN[String(parseInt(m[1], 10))] || String(parseInt(m[1], 10));
+      else marker = m[1].toUpperCase().replace(/[^IVXL]/g, "");
+    }
+    return "CAT" + (marker ? "-" + marker : "");
+  }
+  if (/\bLAB(?:ORATORY)?\b|\bPRACTICAL\b/i.test(raw)) return "PRACTICAL EXAMINATIONS";
+  if (/\bUNIVERSITY\b|\bUNIV\.?\s*EXAM\b|\bDEGREE\s*EXAMINATIONS?\b/i.test(raw)) return "UNIVERSITY EXAMINATIONS";
+  return "";
+}
+// The ONE heading resolver. Precedence (spec §1): per-call override, then the
+// college's shared exam title (both verbatim), then a metadata-derived CAT heading
+// from the representative exam of the target date, then the legacy NOV/DEC line
+// with a warning. Used by buildHallNoticesDocument / buildHallNoticesPrintDocument
+// AND buildGlobalNoticeHalls, so the two documents can never disagree.
+function resolveNoticeHeading(context) {
+  context = context || {};
+  const warnings = [];
+  const exams = context.exams || [];
+  const explicit = String(context.noticeTitle || "").trim() || String(context.exam_title || "").trim();
+  if (explicit) return { title: explicit, warnings: warnings };
+  const dated = (context.date)
+    ? exams.filter(function(e) { return e && hnCanonDate(e.date) === hnCanonDate(context.date); })
+    : [];
+  const first = dated[0] || exams[0] || null;
+  if (!first) {
+    const ym = String(context.date || "").match(/(\d{4})/);
+    const y = ym ? ym[1] : String(new Date().getFullYear());
+    warnings.push("No exam metadata and no shared exam title — printed the default NOV/DEC heading.");
+    return { title: "ANNA UNIVERSITY EXAMINATIONS NOV/DEC " + y, warnings: warnings };
+  }
+  const tok = hnNoticeTypeToken(first);
+  const ay = hnAcademicYearOf(first.date || context.date);
+  const tag = hnSemesterTag((first.groups || []).map(function(g) { return examGroupSem(g); }));
+  if (tok && tok.indexOf("CAT") === 0 && ay) {
+    const parts = [tok, ay];
+    if (tag.classification) parts.push(tag.classification);
+    let title = parts.join(" ");
+    if (tag.years.length) title += " [" + tag.years.join(", ").replace(/,\s([^,]+)$/, " & $1") + " Year]";
+    return { title: title, warnings: warnings };
+  }
+  const ym = String(first.date || context.date || "").match(/(\d{4})/);
+  const y = ym ? ym[1] : String(new Date().getFullYear());
+  warnings.push("No shared exam title and no derivable CAT heading — printed the default NOV/DEC heading.");
+  return { title: "ANNA UNIVERSITY EXAMINATIONS NOV/DEC " + y, warnings: warnings };
+}
+// The historic fallback line, shared by both documents when no metadata exists.
+function hnLegacyNoticeHeading(date) {
+  const m = String(date || "").match(/(\d{4})/);
+  const y = m ? m[1] : String(new Date().getFullYear());
+  return "ANNA UNIVERSITY EXAMINATIONS NOV/DEC " + y;
+}
+// "II CSE A" for an occupied seat: roman year + canonical dept (+ section when the
+// roster supplies one). With no authoritative year the plain dept is printed and
+// nothing is invented.
+function hnNoticeDeptYear(row) {
+  const d = (row && (row.deptCanon || row.dept)) || "-";
+  const yr = hnYearRoman(row && row.year);
+  const sec = hnStudentSection(row && row.section);
+  return yr ? (yr + " " + d + (sec ? " " + sec : "")) : (d + (sec ? " " + sec : ""));
+}
+function hnStudentSection(raw) {
+  return String(raw == null ? "" : raw).replace(/\s+/g, " ").trim().toUpperCase().slice(0, 6);
+}
+// Gender kind for the notice/report paths. The roster's stored gender is the ONLY
+// source ("male"/"m" and "female"/"f" are recognised; "boy"/"girl" tolerated).
+// Anything else — blank, unrecognised, or a register number with no roster row —
+// is "unknown" and is reported as Unclassified. It is NEVER folded into the male
+// or female tally, and it is NEVER inferred from a register number, department,
+// hall name, label or student name.
+function hnGenderKind(g) {
+  const v = String(g == null ? "" : g).trim().toLowerCase();
+  if (v === "male" || v === "m" || v === "boy" || v === "boys") return "male";
+  if (v === "female" || v === "f" || v === "girl" || v === "girls") return "female";
+  return "unknown";
+}
+
+function hallNoticesGroup(exams, seatingPlans, halls, fDate, fSession, fHall, students) {
   const examCode = function(e) {
     if (e.subjectCode) return e.subjectCode;
     const s = String(e.subject || "").split(" - ")[0].trim();
@@ -1928,11 +2076,13 @@ function hallNoticesGroup(exams, seatingPlans, halls, fDate, fSession, fHall) {
     return "UNSPECIFIED";
   };
   const flat = [];
+  const stuIndex = hnIndexStudents(students);
   (exams || []).forEach(function(e) {
     const plan = seatingPlans[e.id]; if (!plan) return;
     if (fDate && hnCanonDate(fDate) !== hnCanonDate(e.date)) return;
     if (fSession && hnCanonSession(fSession) !== hnCanonSession(e.session)) return;
     const subj = examCode(e);
+    const deptSem = hnExamDeptSem(e);
     Object.keys(plan).forEach(function(hid) {
       const hp = plan[hid]; if (!hp || !hp.seats) return;
       // Canonical hall identity: resolve to the halls-list entry first, then only
@@ -1946,8 +2096,19 @@ function hallNoticesGroup(exams, seatingPlans, halls, fDate, fSession, fHall) {
       if (!hall) hnDebug("[HN-DEBUG] unresolved-hall", { planKey: hid, hallName: (hp && hp.hallName) || null, examId: e.id });
       (hp.seats || []).forEach(function(s) {
         if (!s || !s.regno) return;
+        // Academic year/sem/section are resolved from AUTHORITATIVE data only: the
+        // student roster (regno match, never a regno-prefix guess) first, then the
+        // exam's own curriculum group for the seat's department. If neither carries
+        // the year, the fields stay empty and no year is invented.
+        const st = (students && stuIndex[String(s.regno).trim()]) || null;
+        const deptRaw = (st && st.dept) || s.dept || "GEN";
+        let sem = (st && String(st.semester == null ? "" : st.semester).replace(/[^0-9]/g, "")) || "";
+        if (!sem) sem = deptSem[canonicalDept(deptRaw)] || "";
+        const year = (st && st.year != null) ? String(st.year) : (sem ? curriSemToYear(sem) : "");
+        const section = st ? hnStudentSection(st.section) : "";
         flat.push({ date: e.date, session: e.session, hall: hall, hallId: hallId, hallName: hallName,
-          subj: subj, regno: s.regno, name: s.name, dept: s.dept || "GEN",
+          examId: e.id, subj: subj, regno: s.regno, name: (st && st.name) || s.name, dept: deptRaw, deptCanon: canonicalDept(deptRaw),
+          sem: sem, year: year, section: section,
           seatNo: s.seatNo, seatLabel: s.seatLabel, bench: parseInt(s.bench, 10), slot: parseInt(s.slot, 10),
           colIdx: s.colIdx, rowIdx: s.rowIdx, colLabel: s.colLabel });
       });
@@ -2060,14 +2221,17 @@ function hnNoticeLayout(group) {
     if (r.slot != null && r.slot > maxSlot) maxSlot = r.slot;
   });
 
-  // Columns: the layout's column groups. Same cap as the allocation engine
-  // (1..4 seats side-by-side per bench).
+  // Columns: the layout's column groups. Same cap as the allocation engine:
+  // 1..6 seats side-by-side per bench, exactly as hallSeatInventory reads them.
+  // The grid must render EVERY declared slot (occupied or empty) so the notice
+  // geometry matches the saved hall layout; a saved seat beyond the declared
+  // width is still widened in below rather than dropped (§31).
   let nCols = cols ? cols.length : 0;
   if (maxCol + 1 > nCols) nCols = maxCol + 1;
   if (nCols < 1) nCols = 1;
   const seats = [];
   for (let ci = 0; ci < nCols; ci++) {
-    const fromLayout = cols && cols[ci] ? Math.max(1, Math.min(4, (cols[ci].seats || 1))) : 0;
+    const fromLayout = cols && cols[ci] ? Math.max(1, Math.min(6, (cols[ci].seats || 1))) : 0;
     seats.push(Math.max(fromLayout, 1));
   }
   // A saved seat may use more slots in a column than the layout allows — widen
@@ -2316,7 +2480,7 @@ function hnNoticeStylesheet() {
 // mode "half" builds the SAME complete notice compacted for the PRINT-combined
 // sheet — one half of an A4 box, so FN + AN can share one physical sheet. The
 // half wrapper has no .pf-page class; the outer .pf-combined sheet owns the A4 box.
-function hnRenderNoticePage(group, col, mode) {
+function hnRenderNoticePage(group, col, mode, heading) {
   mode = mode === "half" ? "half" : "full";
   const hall = group.hall || null;
   const L = hnNoticeLayout(group);
@@ -2354,8 +2518,10 @@ function hnRenderNoticePage(group, col, mode) {
   // The hall name is already canonicalised (name-matched) by hallNoticesGroup,
   // so duplicate hall records collapse onto one notice and one page.
   const hallName = group.hallName || group.hallId || "-";
-  const yearM = String(group.date || "").match(/(\d{4})/);
-  const year = yearM ? yearM[1] : String(new Date().getFullYear());
+  // The heading is the SHARED one resolved by the builders (same source as the
+  // Global Notice); only the legacy fallback is computed here when a builder
+  // chose not to pass one.
+  const headingLine = heading || hnLegacyNoticeHeading(group.date);
 
   let headCells = "";
   for (let ci = 0; ci < L.nCols; ci++) headCells += '<th class="colhdr">COLUMN ' + hnEsc(colLabelFromIdx(ci)) + '</th>';
@@ -2381,7 +2547,7 @@ function hnRenderNoticePage(group, col, mode) {
           + (st
             ? '<div class="cell"><div class="seat">' + hnEsc(st.seatLabel || label) + '</div>'
               + '<div class="lab">REGISTER NO.</div><div class="val">' + hnEsc(st.regno) + '</div>'
-              + '<div class="lab">DEPT</div><div class="val">' + hnEsc(st.dept || "-") + '</div></div>'
+              + '<div class="lab">DEPT</div><div class="val">' + hnEsc(hnNoticeDeptYear(st)) + '</div></div>'
             // Empty slot: keeps its horizontal position, prints no seat label.
             : '<div class="cell empty"></div>')
           + '</div>';
@@ -2396,7 +2562,7 @@ function hnRenderNoticePage(group, col, mode) {
   return '<div class="' + (mode === "half" ? "pf-half" : "pf-page") + '" style="font-size:' + (12 * M.scale).toFixed(2) + 'px">'
     + '<div class="pf-head">'
     +   '<div class="pf-proforma">PROFORMA 1</div>'
-    +   '<div class="pf-univ">ANNA UNIVERSITY EXAMINATIONS NOV/DEC ' + hnEsc(year) + '</div>'
+    +   '<div class="pf-univ">' + hnEsc(headingLine) + '</div>'
     +   '<div class="pf-title">SEATING ARRANGEMENT</div>'
     +   '<div class="pf-centre">Centre: ' + hnEsc((col && col.centre_code) ? col.centre_code + " - " : "") + hnEsc((col && col.name) || "") + '</div>'
     // HALL NO / SESSION / DATE promoted to boxed key facts, each printed as ONE
@@ -2436,14 +2602,18 @@ function buildHallNoticesDocument(opts, college) {
   const seatingPlans = opts.seatingPlans || {};
   const halls = opts.halls || [];
 
-  const groups = hallNoticesGroup(exams, seatingPlans, halls, opts.date || null, opts.session || null, opts.hallId || null);
+  const groups = hallNoticesGroup(exams, seatingPlans, halls, opts.date || null, opts.session || null, opts.hallId || null, opts.students);
   const ordered = hnNoticeOrder(groups, halls);
+
+  // The ONE shared heading (same source as the Global Notice) for every notice
+  // in this document, so no hall can print a different title line.
+  const heading = resolveNoticeHeading({ exams: exams, date: opts.date, noticeTitle: opts.noticeTitle, exam_title: col.exam_title }).title;
 
   // ONE group (date+session+hall) = ONE page. FN and AN are separate notices
   // and are never combined (§5, §26).
   const pages = ordered.map(function(g) {
     g.hall = g.hall || (halls.find(function(x) { return x.id === g.hallId; }) || null);
-    return hnRenderNoticePage(g, col);
+    return hnRenderNoticePage(g, col, "full", heading);
   });
 
   const notices = ordered.map(function(g) {
@@ -2469,9 +2639,13 @@ function buildHallNoticesPrintDocument(opts, college) {
   const seatingPlans = opts.seatingPlans || {};
   const halls = opts.halls || [];
 
-  const groups = hallNoticesGroup(exams, seatingPlans, halls, opts.date || null, opts.session || null, opts.hallId || null);
+  const groups = hallNoticesGroup(exams, seatingPlans, halls, opts.date || null, opts.session || null, opts.hallId || null, opts.students);
   const ordered = hnNoticeOrder(groups, halls);
   ordered.forEach(function(g) { g.hall = g.hall || (halls.find(function(x) { return x.id === g.hallId; }) || null); });
+
+  // The ONE shared heading (same source as the Global Notice) for every notice
+  // in this document, so no hall can print a different title line.
+  const heading = resolveNoticeHeading({ exams: exams, date: opts.date, noticeTitle: opts.noticeTitle, exam_title: col.exam_title }).title;
 
   // Pair the groups of ONE date + ONE PHYSICAL HALL. Canonical date and the hall's
   // canonical id, so alias spellings cannot split a pair.
@@ -2489,14 +2663,14 @@ function buildHallNoticesPrintDocument(opts, college) {
     if (fn && an) {
       // EXACTLY ONE A4 portrait sheet: FN on TOP, AN on BOTTOM. Both complete.
       pages.push('<div class="pf-page pf-combined">'
-        + hnRenderNoticePage(fn, col, "half")
+        + hnRenderNoticePage(fn, col, "half", heading)
         + '<div class="pf-splitline"></div>'
-        + hnRenderNoticePage(an, col, "half")
+        + hnRenderNoticePage(an, col, "half", heading)
         + '</div>');
     } else {
       // Only one session exists: a complete notice on its own full A4 sheet,
       // with NO reserved half for the missing session.
-      pages.push(hnRenderNoticePage(fn || an || ps[0], col, "full"));
+      pages.push(hnRenderNoticePage(fn || an || ps[0], col, "full", heading));
     }
   });
 
@@ -2700,14 +2874,14 @@ function globalNoticeDates(exams, seatingPlans) {
 // hall totals and the session grand total are all derived only from that saved
 // allocation. `college` supplies centre/examination text when the exam records do
 // not carry PDF-detected values.
-function buildGlobalNoticeHalls(exams, seatingPlans, halls, fDate, fSession, college) {
+function buildGlobalNoticeHalls(exams, seatingPlans, halls, fDate, fSession, college, students, noticeTitle) {
   exams = exams || []; seatingPlans = seatingPlans || {}; halls = halls || [];
   const sess = gnValidSession(fSession);
   if (!sess) {
     return { date: fDate, session: gnCanonSession(fSession), centreCode: "", centreName: "", examination: "",
-      halls: [], grandTotal: 0, warnings: ["Session must be FN or AN."] };
+      halls: [], grandTotal: 0, boys: 0, girls: 0, unknown: 0, warnings: ["Session must be FN or AN."] };
   }
-  const groups = hallNoticesGroup(exams, seatingPlans, halls, fDate, fSession, null);
+  const groups = hallNoticesGroup(exams, seatingPlans, halls, fDate, fSession, null, students);
   const ordered = hnNoticeOrder(groups || [], halls);
   const bySess = {};
   (ordered || []).forEach(function (g) {
@@ -2716,22 +2890,72 @@ function buildGlobalNoticeHalls(exams, seatingPlans, halls, fDate, fSession, col
     (bySess[k] = bySess[k] || []).push(g);
   });
   const list = bySess[sess] || [];
+  // Gender for the notice comes ONLY from the authoritative student roster, keyed
+  // by the exact register number (never a regno prefix, dept or hall name). A seat
+  // whose register number has no roster row, or whose roster gender is blank or
+  // unrecognised, is Unclassified and is counted separately.
+  const stuIndex = hnIndexStudents(students);
+  const genderOf = function (regno) {
+    const st = stuIndex[String(regno == null ? "" : regno).trim()];
+    return hnGenderKind(st && st.gender);
+  };
   const hallOut = [];
+  let unresolvedSeatCount = 0;
   list.forEach(function (g) {
     const rows = g.rows || [];
-    const order = []; const bySubj = {};
+    // Each subject × academic-year × dept × section group is its OWN row, so a
+    // subject offered to II & IV is SPLIT across two rows and no year is ever
+    // merged into a dept-only label (§"year on every group"). The row key ALSO
+    // carries the exam identity: two different exam papers that happen to share
+    // the same subject code (and same dept/year/section) are never merged, and
+    // the code shown on a row is always each exam's own code.
+    const buckets = {}; const o = [];
+    const yearRank = {};
     rows.forEach(function (r) {
       const code = (r && r.subj) || "UNSPECIFIED";
-      if (!bySubj[code]) { bySubj[code] = { regnos: [] }; order.push(code); }
-      bySubj[code].regnos.push(r.regno);
+      const label = hnNoticeDeptYear(r);
+      const examKey = String((r && r.examId != null) ? r.examId : "").trim();
+      const k = code + "|" + label + "|" + examKey;
+      if (!buckets[k]) {
+        buckets[k] = { code: code, label: label, dept: (r && (r.deptCanon || r.dept)) || "-",
+          year: hnYearRoman(r && r.year), regnos: [], boys: 0, girls: 0, unknown: 0 };
+        yearRank[k] = (r && r.year != null && !isNaN(parseInt(r.year, 10))) ? parseInt(r.year, 10) : 9;
+        o.push(k);
+      }
+      buckets[k].regnos.push(r.regno);
+      const gk = genderOf(r.regno);
+      if (!stuIndex[String(r.regno == null ? "" : r.regno).trim()]) unresolvedSeatCount++;
+      if (gk === "male") buckets[k].boys++;
+      else if (gk === "female") buckets[k].girls++;
+      else buckets[k].unknown++;
     });
-    const subjects = order.map(function (code) {
-      const regnos = (bySubj[code].regnos || []).slice();
+    const years = {};
+    rows.forEach(function (r) {
+      const yr = hnYearRoman(r && r.year);
+      if (yr) years[yr] = true;
+    });
+    const orderedYears = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"].filter(function (y) { return years[y]; });
+    o.sort(function (a, b) {
+      const A = buckets[a], B = buckets[b];
+      if (A.code !== B.code) return A.code < B.code ? -1 : 1;
+      if (yearRank[a] !== yearRank[b]) return yearRank[a] - yearRank[b];
+      if (A.dept !== B.dept) return A.dept < B.dept ? -1 : 1;
+      if (A.label !== B.label) return A.label < B.label ? -1 : 1;
+      return a < b ? -1 : 1;
+    });
+    const subjects = o.map(function (k) {
+      const b = buckets[k];
+      const regnos = (b.regnos || []).slice();
       const compact = gnCompactRegnos(regnos);
-      return { subject: code, dept: gnDeptFor(rows, code), regnos: regnos, count: regnos.length,
-        compact: compact, display: compact.join(", ") };
+      return { subject: b.code, dept: b.dept, year: b.year, label: b.label, regnos: regnos, count: regnos.length,
+        compact: compact, display: compact.join(", "),
+        boys: b.boys, girls: b.girls, unknown: b.unknown };
     });
-    hallOut.push({ hallId: g.hallId, hallName: g.hallName || g.hallId, subjects: subjects, total: rows.length });
+    const hallBoys = subjects.reduce(function (a, x) { return a + x.boys; }, 0);
+    const hallGirls = subjects.reduce(function (a, x) { return a + x.girls; }, 0);
+    const hallUnknown = subjects.reduce(function (a, x) { return a + x.unknown; }, 0);
+    hallOut.push({ hallId: g.hallId, hallName: g.hallName || g.hallId, subjects: subjects,
+      years: orderedYears, total: rows.length, boys: hallBoys, girls: hallGirls, unknown: hallUnknown });
   });
   const seatExams = exams.filter(function (e) {
     return e && e.seatinggenerated && seatingPlans[e.id] && gnCanonDate(e.date) === gnCanonDate(fDate) && gnCanonSession(e.session) === sess;
@@ -2741,8 +2965,12 @@ function buildGlobalNoticeHalls(exams, seatingPlans, halls, fDate, fSession, col
     : ((typeof ACTIVE_COLLEGE !== "undefined" && ACTIVE_COLLEGE) || {});
   const centreCode = (first && first.collegeCode) || coll.centre_code || "";
   const centreName = (first && first.collegeName) || coll.name || "";
-  const examination = (first && first.examCategory) || coll.exam_title || "ANNA UNIVERSITY CHENNAI EXAMINATIONS NOV/DEC 2025";
+  // The SAME ONE heading resolver the Hall Notice uses, so the two documents can
+  // never disagree. Replaces the old raw examCategory / "…NOV/DEC 2025" line.
+  const examHead = resolveNoticeHeading({ exams: seatExams, date: fDate, noticeTitle: noticeTitle || null, exam_title: coll.exam_title });
+  const examination = examHead.title;
   const warnings = [];
+  examHead.warnings.forEach(function (w) { if (warnings.indexOf(w) < 0) warnings.push(w); });
   if (!hallOut.length && !seatExams.length) {
     warnings.push("No " + sess + " examination data is available for the selected date.");
   }
@@ -2758,8 +2986,17 @@ function buildGlobalNoticeHalls(exams, seatingPlans, halls, fDate, fSession, col
     }
   });
   const grandTotal = hallOut.reduce(function (a, h) { return a + h.total; }, 0);
+  const boys = hallOut.reduce(function (a, h) { return a + h.boys; }, 0);
+  const girls = hallOut.reduce(function (a, h) { return a + h.girls; }, 0);
+  const unknown = hallOut.reduce(function (a, h) { return a + h.unknown; }, 0);
+  if (unknown > 0) {
+    warnings.push(unknown + " allocated seat(s) have no recognisable gender on the student roster — shown as Unclassified and excluded from the Boys/Girls tallies.");
+  }
+  if (unresolvedSeatCount > 0) {
+    warnings.push(unresolvedSeatCount + " allocated seat(s) name a register number with no student record — the roster may be stale. Correct the records and regenerate the seating before printing.");
+  }
   return { date: fDate, session: sess, centreCode: centreCode, centreName: centreName, examination: examination,
-    halls: hallOut, grandTotal: grandTotal, warnings: warnings };
+    halls: hallOut, grandTotal: grandTotal, boys: boys, girls: girls, unknown: unknown, warnings: warnings };
 }
 function gnHeaderHTML(gn, dateStr, sess) {
   return '<div class="gn-hdr">'
@@ -2770,33 +3007,69 @@ function gnHeaderHTML(gn, dateStr, sess) {
     + '<div class="gn-sd">Session: ' + hnEsc(sess) + '&nbsp;&nbsp;|&nbsp;&nbsp;Date: ' + hnEsc(dateStr) + '</div>'
     + '</div>';
 }
-function gnHallBlockHTML(hall) {
-  const rows = (hall.subjects || []).map(function (s, idx) {
-    return '<tr class="gn-sub">'
-      + '<td class="gn-c">' + (idx + 1) + '</td>'
-      + '<td class="gn-c">' + hnEsc(s.subject) + '</td>'
-      + '<td class="gn-c">' + hnEsc(s.dept) + '</td>'
-      + '<td class="gn-reg">' + hnEsc(s.display) + '</td>'
-      + '<td class="gn-c">' + s.count + '</td>'
-      + '</tr>';
-  }).join("");
-  return '<div class="gn-hall">'
-    + '<div class="gn-hallname">' + hnEsc(hall.hallName) + '</div>'
-    + '<table class="gn-tbl"><colgroup>'
-    + '<col class="gn-cno"/><col class="gn-sub"/><col class="gn-dept"/><col class="gn-regc"/><col class="gn-cnt"/>'
+// The hall block is exposed as reusable fragments so the document builder can
+// flow a hall's rows across page boundaries: the banner and column headings can
+// be re-emitted on a continuation page (repeated headings) while the rows and
+// TOTAL are emitted once, in order. `gnHallBlockHTML` composes the whole block
+// (used by the preview/tests) and is exactly the fragments concatenated.
+//
+// Height model used ONLY to page the notice so no hall is ever clipped. Values
+// are deliberately conservative (they over-estimate) and form the budget the A4
+// page is paged against; the CSS keeps a page at A4 where content fits and lets
+// it grow as a last-resort safety net, but the budget prevents that in practice.
+function gnEstRowHeight(display) {
+  const len = String(display == null ? "" : display).length;
+  const lines = Math.max(1, Math.ceil(len / 46));   // ~46 register-number chars per wrapped line
+  return Math.max(24, 8 + lines * 15);
+}
+function gnHallBannerHeight(hall) {
+  return 32 + ((hall.years && hall.years.length) ? 16 : 0);
+}
+function gnHallBannerHTML(hall) {
+  const yearsLine = (hall.years && hall.years.length)
+    ? '<div class="gn-years">Years: ' + hnEsc(hall.years.join(", ").replace(/,\s([^,]+)$/, " & $1")) + '</div>'
+    : "";
+  return '<div class="gn-hallname">' + hnEsc(hall.hallName) + yearsLine + '</div>';
+}
+function gnTableHeadHTML() {
+  return '<table class="gn-tbl"><colgroup>'
+    + '<col class="gn-cno"/><col class="gn-sub"/><col class="gn-dept"/><col class="gn-regc"/>'
+    + '<col class="gn-boyc"/><col class="gn-girlc"/><col class="gn-uncc"/><col class="gn-cnt"/>'
     + '</colgroup><thead><tr>'
-    + '<th class="gn-cno">S.No</th><th class="gn-sub">Subject Code</th><th class="gn-dept">Department</th><th class="gn-regc">Register Numbers</th><th class="gn-cnt">Students</th>'
-    + '</tr></thead><tbody>'
-    + rows
-    + '<tr class="gn-htot"><td class="gn-totl" colspan="4">TOTAL</td><td class="gn-c">' + hall.total + '</td></tr>'
-    + '</tbody></table></div>';
+    + '<th class="gn-cno">S.No</th><th class="gn-sub">Subject Code</th><th class="gn-dept">Dept & Year</th><th class="gn-regc">Register Numbers</th>'
+    + '<th class="gn-boyc gn-boys">Boys</th><th class="gn-girlc gn-girls">Girls</th><th class="gn-uncc gn-uncl">Uncl.</th><th class="gn-cnt">Students</th>'
+    + '</tr></thead><tbody>';
+}
+function gnSubjectRowHTML(s, idx) {
+  return '<tr class="gn-sub">'
+    + '<td class="gn-c">' + (idx + 1) + '</td>'
+    + '<td class="gn-c">' + hnEsc(s.subject) + '</td>'
+    + '<td class="gn-c">' + hnEsc(s.label) + '</td>'
+    + '<td class="gn-reg">' + hnEsc(s.display) + '</td>'
+    + '<td class="gn-c gn-boys">' + (s.boys || 0) + '</td>'
+    + '<td class="gn-c gn-girls">' + (s.girls || 0) + '</td>'
+    + '<td class="gn-c gn-uncl">' + (s.unknown || 0) + '</td>'
+    + '<td class="gn-c">' + s.count + '</td>'
+    + '</tr>';
+}
+function gnHallTotalRowHTML(hall) {
+  return '<tr class="gn-htot"><td class="gn-totl" colspan="4">TOTAL</td>'
+    + '<td class="gn-c gn-boys">' + (hall.boys || 0) + '</td>'
+    + '<td class="gn-c gn-girls">' + (hall.girls || 0) + '</td>'
+    + '<td class="gn-c gn-uncl">' + (hall.unknown || 0) + '</td>'
+    + '<td class="gn-c">' + hall.total + '</td></tr>';
+}
+function gnHallBlockHTML(hall) {
+  const rows = (hall.subjects || []).map(gnSubjectRowHTML).join("");
+  return '<div class="gn-hall">' + gnHallBannerHTML(hall)
+    + gnTableHeadHTML() + rows + gnHallTotalRowHTML(hall) + '</tbody></table></div>';
 }
 // A4 portrait styling shared by the live preview and the downloaded PDF so the
 // document is byte-identical in both (§17).
 function gnNoticeStylesheet() {
   return [
     '*{box-sizing:border-box;margin:0;padding:0;}',
-    '.gnotice-page{width:794px;height:1123px;padding:18px 24px;font-family:"Times New Roman",serif;color:#000;background:#fff;overflow:hidden;}',
+    '.gnotice-page{width:794px;min-height:1123px;padding:18px 24px;font-family:"Times New Roman",serif;color:#000;background:#fff;}',
     '.gn-hdr{text-align:center;margin-bottom:12px;}',
     '.gn-proforma{font-size:11px;font-weight:bold;letter-spacing:2px;}',
     '.gn-univ{font-size:14px;font-weight:bold;text-transform:uppercase;margin:2px 0;}',
@@ -2805,46 +3078,95 @@ function gnNoticeStylesheet() {
     '.gn-sd{font-size:12px;font-weight:bold;margin-top:2px;}',
     '.gn-hall{margin-bottom:10px;border:1.5px solid #000;}',
     '.gn-hallname{font-size:14px;font-weight:bold;padding:5px 10px;background:#f0f0f0;letter-spacing:1px;border-bottom:1.5px solid #000;}',
+    '.gn-hallname .gn-years{font-size:11px;font-weight:bold;letter-spacing:0.5px;margin-top:2px;}',
     '.gn-tbl{width:100%;border-collapse:collapse;table-layout:fixed;}',
     '.gn-tbl th{border:1px solid #000;padding:4px 6px;font-size:11px;background:#e8e8e8;text-align:center;vertical-align:middle;}',
     '.gn-tbl td{border:1px solid #555;padding:3px 6px;font-size:11px;vertical-align:middle;}',
     '.gn-c{text-align:center;}',
     '.gn-reg{text-align:left;font-family:Consolas,monospace;font-size:11px;letter-spacing:0.3px;word-break:break-word;}',
     '.gn-tbl col.gn-cno{width:28px;}',
-    '.gn-tbl col.gn-sub{width:86px;}',
-    '.gn-tbl col.gn-dept{width:80px;}',
-    '.gn-tbl col.gn-cnt{width:58px;}',
+    '.gn-tbl col.gn-sub{width:80px;}',
+    '.gn-tbl col.gn-dept{width:72px;}',
+    '.gn-tbl col.gn-boyc{width:40px;}',
+    '.gn-tbl col.gn-girlc{width:40px;}',
+    '.gn-tbl col.gn-uncc{width:40px;}',
+    '.gn-tbl col.gn-cnt{width:50px;}',
     '.gn-tbl col.gn-regc{width:auto;}',
+    '.gn-boys{color:#1d4ed8;}',
+    '.gn-girls{color:#be185d;}',
+    '.gn-uncl{color:#92400e;}',
     '.gn-htot td{font-weight:bold;background:#f5f5f5;}',
     '.gn-htot td.gn-totl{text-align:right;}',
     '.gn-grand{font-size:15px;font-weight:bold;text-align:right;margin:14px 0 40px;border-top:1.5px solid #000;padding-top:6px;}',
+    '.gn-gbkd{font-size:11px;font-weight:bold;color:#333;margin-top:4px;}',
     '.gn-sgn{display:flex;justify-content:space-between;margin-top:30px;}',
     '.gn-sb{font-size:11px;text-align:center;width:280px;border-top:1px solid #000;padding-top:6px;line-height:1.4;}',
     '@media print{.gnotice-page{page-break-after:always;}}'
   ].join("\n");
 }
-// Document builder shared by the dashboard preview and the PDF download: ONE
-// A4 page per chunk of halls (header repeated per page), TOTAL per hall, GRAND
-// TOTAL + signature area on the final page. No allocation data is recomputed.
+// Document builder shared by the dashboard preview and the PDF download. Pages
+// are filled by CONTENT (estimated pixel height), never a fixed hall count, so a
+// notice of any size paginates into AS MANY A4 pages as it needs and NO hall is
+// ever dropped or clipped. The official header repeats on every page; a hall
+// heading stays with (at least) the first two rows of its table, column headings
+// repeat when a table continues on the next page, and the GRAND TOTAL +
+// signature block follows the last hall. No allocation data is recomputed.
 function buildGlobalNoticeDocument(opts, college) {
   opts = opts || {};
-  const gn = buildGlobalNoticeHalls(opts.exams, opts.seatingPlans, opts.halls, opts.date, opts.session, college);
+  const gn = buildGlobalNoticeHalls(opts.exams, opts.seatingPlans, opts.halls, opts.date, opts.session, college, opts.students, opts.noticeTitle);
   const dateStr = gnFormatDate(gn.date);
   const sess = gn.session || "";
   const pages = [];
   if (gn.halls.length) {
-    const perPage = 10;
-    for (let i = 0; i < gn.halls.length; i += perPage) {
-      const chunk = gn.halls.slice(i, i + perPage);
-      let body = gnHeaderHTML(gn, dateStr, sess);
-      body += chunk.map(function (h) { return gnHallBlockHTML(h); }).join("");
-      if (i + perPage >= gn.halls.length) {
-        body += '<div class="gn-grand">GRAND TOTAL (' + sess + '): ' + gn.grandTotal + '</div>';
-        body += '<div class="gn-sgn"><div class="gn-sb">Name and signature of the Chief Superintendent</div>'
-          + '<div class="gn-sb">' + hnEsc((college && college.coe) || "Chief Superintendent Signature with College seal") + '</div></div>';
-      }
-      pages.push('<div class="gnotice-page">' + body + '</div>');
-    }
+    const USABLE = 1123 - 36;      // A4 box (1123px) minus 18px top+bottom padding
+    const HDR_H = 90;              // official header block
+    const HEAD_H = 34;             // column-heading row
+    const TOTAL_H = 28;            // hall TOTAL row
+    const HALL_GAP = 14;           // .gn-hall bottom margin
+    const GRAND_H = 185;           // GRAND TOTAL + signature block
+    let cur = gnHeaderHTML(gn, dateStr, sess);
+    let used = HDR_H;
+    let hasRow = false;            // a data row has already been placed on this page
+    const pageWrap = function (body) { return '<div class="gnotice-page">' + body + '</div>'; };
+    const newPage = function () { pages.push(pageWrap(cur)); cur = gnHeaderHTML(gn, dateStr, sess); used = HDR_H; hasRow = false; };
+    const openHall = function (hall) { cur += '<div class="gn-hall">' + gnHallBannerHTML(hall) + gnTableHeadHTML(); used += gnHallBannerHeight(hall) + HEAD_H; };
+    const closeHall = function () { cur += '</tbody></table></div>'; };
+    gn.halls.forEach(function (hall) {
+      const subs = hall.subjects || [];
+      // A hall may BEGIN mid-page only when its banner, column headings and the
+      // first TWO subject rows (plus the TOTAL) all fit together. Otherwise the
+      // whole table is moved to the next page: a section never dangles as a
+      // single lone row at the bottom of a page (the drawing-hall split), so the
+      // hall heading is kept with a practical chunk of its table. A hall with a
+      // single row still requires banner + head + that row + TOTAL to fit.
+      const firstH = subs.length ? gnEstRowHeight(subs[0].display) : 0;
+      const secondH = subs.length > 1 ? gnEstRowHeight(subs[1].display) : TOTAL_H;
+      const minStart = gnHallBannerHeight(hall) + HEAD_H + firstH + secondH + TOTAL_H;
+      if (hasRow && used + minStart > USABLE) newPage();
+      openHall(hall);
+      subs.forEach(function (s, idx) {
+        const rh = gnEstRowHeight(s.display);
+        // Continue a table on a new page only once it already holds a data row;
+        // a single over-tall row is allowed to grow its page (min-height safety
+        // net) rather than loop. The banner + headings are re-emitted so the
+        // continuation never appears without hall context or column headings.
+        if (hasRow && used + rh + TOTAL_H > USABLE) { closeHall(); newPage(); openHall(hall); }
+        cur += gnSubjectRowHTML(s, idx);
+        used += rh; hasRow = true;
+      });
+      if (hasRow && used + TOTAL_H > USABLE) { closeHall(); newPage(); openHall(hall); }
+      cur += gnHallTotalRowHTML(hall);
+      used += TOTAL_H + HALL_GAP;
+      closeHall();
+    });
+    if (hasRow && used + GRAND_H > USABLE) newPage();
+    cur += '<div class="gn-grand">GRAND TOTAL (' + sess + '): ' + gn.grandTotal
+      + '<div class="gn-gbkd"><span class="gn-boys">Boys: ' + gn.boys + '</span> &nbsp;|&nbsp; '
+      + '<span class="gn-girls">Girls: ' + gn.girls + '</span> &nbsp;|&nbsp; '
+      + '<span class="gn-uncl">Unclassified: ' + gn.unknown + '</span></div></div>';
+    cur += '<div class="gn-sgn"><div class="gn-sb">Name and signature of the Chief Superintendent</div>'
+      + '<div class="gn-sb">' + hnEsc((college && college.coe) || "Chief Superintendent Signature with College seal") + '</div></div>';
+    pages.push(pageWrap(cur));
   }
   return { css: gnNoticeStylesheet(), pages: pages, halls: gn.halls, grandTotal: gn.grandTotal,
     date: gn.date, session: sess, warnings: gn.warnings, gn: gn };
@@ -2883,7 +3205,7 @@ function gnNoticePath(session, date) {
   return p;
 }
 
-function GlobalNoticePage({ exams, seatingPlans, halls, college, showToast }) {
+function GlobalNoticePage({ exams, seatingPlans, halls, students, college, showToast }) {
   const dates = globalNoticeDates(exams, seatingPlans);
   const route = useRoute();
   const urlSession = gnValidSession((route.params || {}).session || "");
@@ -2901,15 +3223,15 @@ function GlobalNoticePage({ exams, seatingPlans, halls, college, showToast }) {
     if (want !== (route.path + route.search)) navigate(want, { replace: true });
   }, [selDate, selSession]);
   const sessLabel = gnValidSession(selSession) || "FN";
-  const gn = buildGlobalNoticeHalls(exams, seatingPlans, halls || [], selDate, sessLabel, college);
+  const gn = buildGlobalNoticeHalls(exams, seatingPlans, halls || [], selDate, sessLabel, college, students || []);
   const doc = buildGlobalNoticeDocument(
-    { exams: exams, seatingPlans: seatingPlans, halls: halls || [], date: selDate, session: sessLabel },
+    { exams: exams, seatingPlans: seatingPlans, halls: halls || [], students: students || [], date: selDate, session: sessLabel },
     college);
   function download() {
     if (!doc.pages.length) { showToast("No " + sessLabel + " data for the selected date.","warn"); return; }
     showToast("Generating Global Notice PDF (" + sessLabel + ")...","info");
     window.generateGlobalNoticePDF(
-      { exams: exams, seatingPlans: seatingPlans, halls: halls || [], date: selDate, session: sessLabel, notify: true },
+      { exams: exams, seatingPlans: seatingPlans, halls: halls || [], students: students || [], date: selDate, session: sessLabel, notify: true },
       college);
   }
   return (
@@ -2950,9 +3272,14 @@ function GlobalNoticePage({ exams, seatingPlans, halls, college, showToast }) {
         <div className="space-y-3 mb-6">
           {gn.halls.map(h=>(
             <div key={h.hallId} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <div className="font-black text-gray-900">{h.hallName}</div>
-                <div className="text-sm font-bold text-gray-500">TOTAL: {h.total}</div>
+                <div className="text-sm font-bold text-gray-500 flex items-center gap-3">
+                  <span className="text-blue-700">Boys: {h.boys}</span>
+                  <span className="text-pink-700">Girls: {h.girls}</span>
+                  {h.unknown>0 && <span className="text-amber-700">Unclassified: {h.unknown}</span>}
+                  <span>TOTAL: {h.total}</span>
+                </div>
               </div>
               <div className="space-y-1.5">
                 {h.subjects.map(s=>(
@@ -2960,7 +3287,10 @@ function GlobalNoticePage({ exams, seatingPlans, halls, college, showToast }) {
                     <div className="font-bold text-gray-800 flex-shrink-0">{s.subject} <span className="text-gray-400 font-semibold text-xs ml-1">({s.dept})</span></div>
                     <div className="text-right">
                       <div className="text-[11px] text-gray-700 font-mono break-words">{s.display}</div>
-                      <div className="text-xs font-bold text-gray-400">{s.count} students</div>
+                      <div className="text-xs font-bold text-gray-400">
+                        <span className="text-blue-700">Boys {s.boys}</span> · <span className="text-pink-700">Girls {s.girls}</span>
+                        {s.unknown>0 && <span className="text-amber-700"> · Unclassified {s.unknown}</span>} · {s.count} students
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -2969,7 +3299,13 @@ function GlobalNoticePage({ exams, seatingPlans, halls, college, showToast }) {
           ))}
           <div className="flex items-center justify-between bg-white rounded-2xl p-5 shadow-sm border-2 border-gray-900">
             <div className="font-black text-gray-900 text-lg">GRAND TOTAL ({gn.session})</div>
-            <div className="text-2xl font-black text-gray-900">{gn.grandTotal}</div>
+            <div className="text-right">
+              <div className="text-2xl font-black text-gray-900">{gn.grandTotal}</div>
+              <div className="text-xs font-bold text-gray-500">
+                <span className="text-blue-700">Boys: {gn.boys}</span> · <span className="text-pink-700">Girls: {gn.girls}</span>
+                {gn.unknown>0 && <span className="text-amber-700"> · Unclassified: {gn.unknown}</span>}
+              </div>
+            </div>
           </div>
         </div>
       ) : (
@@ -2983,7 +3319,7 @@ function GlobalNoticePage({ exams, seatingPlans, halls, college, showToast }) {
           <div className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">PDF Preview (identical to download)</div>
           <div className="flex flex-wrap gap-6">
             {doc.pages.map((p,i)=>(
-              <div key={i} className="shadow-lg rounded-sm overflow-hidden bg-white" style={{width:794, height:1123, flex:"0 0 auto"}}>
+              <div key={i} className="shadow-lg rounded-sm overflow-hidden bg-white" style={{width:794, minHeight:1123, flex:"0 0 auto"}}>
                 <style>{doc.css}</style>
                 <div dangerouslySetInnerHTML={{__html:p}} />
               </div>
@@ -3630,6 +3966,115 @@ const uid = () => {
   return (Date.now().toString(36) + rnd).toUpperCase().slice(0,16);
 };
 
+// ── SEATING-PLAN OWNERSHIP ───────────────────────────────────────────────────
+// A seating-plan document carries NO college_id of its own (see the collection
+// layout note and RTDB layout above), so its owner can only be derived from the
+// EXAM it belongs to. Every plan write therefore has to answer one question:
+// does the target exam belong to the ACTIVE college? This pure decision is the
+// single source of truth for that answer; the async wrapper below supplies the
+// live college and the exam's recorded owner. Both the historical developer
+// exemption (DEV_UID, identical to dbUpdate/dbDelete) and the "cannot establish
+// ownership => refuse" rule live here, so no caller can accidentally open a
+// cross-college write. A plan is never migrated and never rewritten: this only
+// gate-keeps NEW/updated writes.
+//
+// input: { examId, collegeId, isDeveloper, examExists, examCollegeId }
+// returns { ok:true, code } or { ok:false, code, reason }
+function seatingPlanOwnershipDecision(input) {
+  const i = input || {};
+  const examId = i.examId == null ? "" : String(i.examId);
+  if (!examId) {
+    return { ok: false, code: "NO_EXAM_ID", reason: "Seating plan write blocked: no exam id was supplied." };
+  }
+  if (i.isDeveloper) return { ok: true, code: "DEVELOPER" };
+  const colId = i.collegeId == null ? "" : String(i.collegeId);
+  if (!colId || colId === "default") {
+    return { ok: false, code: "NO_COLLEGE", reason: "Seating plan write blocked: the active college could not be established." };
+  }
+  if (!i.examExists) {
+    return { ok: false, code: "NO_EXAM", reason: "Seating plan write blocked: exam " + examId + " does not exist, so its college ownership cannot be established." };
+  }
+  const owner = i.examCollegeId == null ? "" : String(i.examCollegeId);
+  if (!owner) {
+    return { ok: false, code: "NO_OWNER", reason: "Seating plan write blocked: exam " + examId + " has no college_id, so ownership cannot be established." };
+  }
+  if (owner !== colId) {
+    return { ok: false, code: "FOREIGN", reason: "Permission denied: exam " + examId + " belongs to another college." };
+  }
+  return { ok: true, code: "OWNED" };
+}
+
+// Async wrapper: resolve the active college and the exam's recorded owner from
+// the live database, then enforce the decision above. It only READS, and it
+// THROWS (stops the caller) whenever ownership cannot be established — never
+// "assume it is ours". Ownerless exams (no college_id) are refused so a legacy
+// record cannot become a loophole.
+async function assertSeatingPlanOwnership(examId) {
+  const cid = examId == null ? "" : String(examId);
+  const isDeveloper = !!(AUTH && AUTH.currentUser && AUTH.currentUser.uid === DEV_UID);
+  const activeCollege = (Store.getCollegeId ? Store.getCollegeId() : null);
+  let examExists = false, examCollegeId = null;
+  // Touch the DB only when the decision needs the exam record: a developer is
+  // exempt, and an unresolved college is refused without any read.
+  if (cid && !isDeveloper && activeCollege && activeCollege !== "default") {
+    if (!DB) throw new Error("Firebase Realtime DB not initialised. Check your config.");
+    const snap = await DB.ref("exams/" + cid + "/college_id").get();
+    examExists = snap.exists();
+    examCollegeId = examExists ? snap.val() : null;
+  }
+  const d = seatingPlanOwnershipDecision({
+    examId: cid, collegeId: activeCollege, isDeveloper: isDeveloper,
+    examExists: examExists, examCollegeId: examCollegeId,
+  });
+  if (!d.ok) {
+    console.error("[Security] " + d.reason);
+    throw new Error(d.reason);
+  }
+  return d;
+}
+
+// ── RESTORE SEATING PLANS (orchestration) ────────────────────────────────────
+// The destructive restore step, extracted from the component so its ordering and
+// failure behaviour can be asserted with injected readers/writers instead of a
+// live database. Contract:
+//   • EVERY backup plan's exam ownership is verified FIRST (assertOwnership).
+//   • If ANY check rejects, this rejects IMMEDIATELY — no plan is deleted and no
+//     plan is written. (The plan step is therefore all-or-nothing; a foreign or
+//     unverifiable exam in the file can never cause a plan to be destroyed.)
+//   • Deletion is scoped to THIS college's exams (current + backup), so plans
+//     for exams this college does not own — including every other college's
+//     plans — are preserved.
+//   • Only then is each plan written through the caller's guarded writer.
+//
+// deps: { backupPlans, currentExamIds, assertOwnership, getAllPlans,
+//         deletePlans, writePlan }
+async function restoreSeatingPlans(deps) {
+  const d = deps || {};
+  const backupPlans = d.backupPlans || {};
+  const planExamIds = Object.keys(backupPlans).map(String);
+  const assertOwnership = d.assertOwnership || function () { return Promise.resolve(); };
+  const getAllPlans = d.getAllPlans || function () { return Promise.resolve([]); };
+  const deletePlans = d.deletePlans || function () { return Promise.resolve(); };
+  const writePlan = d.writePlan || function () { return Promise.resolve(); };
+
+  // 1) Verify ownership of EVERY target exam BEFORE touching anything.
+  for (const exam_id of planExamIds) {
+    await assertOwnership(exam_id);
+  }
+  // 2) Delete only the plans that belong to THIS college's exams.
+  const ownedExamIds = new Set((d.currentExamIds || []).map(String).concat(planExamIds));
+  const existing = await getAllPlans();
+  const ownedPlanIds = (existing || [])
+    .filter(function (p) { return p && ownedExamIds.has(String(p.exam_id)); })
+    .map(function (p) { return p.id; });
+  if (ownedPlanIds.length) await deletePlans(ownedPlanIds);
+  // 3) Write each backup plan through the caller's guarded writer.
+  for (const exam_id of planExamIds) {
+    await writePlan(exam_id, backupPlans[exam_id]);
+  }
+  return { checked: planExamIds.length, deleted: ownedPlanIds.length, written: planExamIds.length };
+}
+
 // ── STORE ─────────────────────────────────────────────────────────────────────
 const Store = {
   // Returns the college_id for the currently logged-in admin
@@ -3658,15 +4103,41 @@ const Store = {
     if (!rr.college) throw new Error(rr.error);
     return dbAdd("students", { ...s, college_id: rr.collegeId });
   },
-  bulkAddStudents: async (arr) => {
+  bulkAddStudents: async (arr, onProgress) => {
     (arr || []).forEach(s => Store.assertValidStudentRecord(s));
+    const list = arr || [];
+    // Defensive: one register number may appear at most once in a single import
+    // batch. The UI already dedupes, but a caller cannot bypass the rule by
+    // calling the API directly (a duplicated regno would create an ambiguous
+    // identity the candidate audit can then never resolve).
+    const dupRegnos = studentRegnoIndex(list).duplicates.map(function (d) { return d.regno; });
+    if (dupRegnos.length) throw new Error("Import blocked: duplicate register number(s) in this batch: " + dupRegnos.join(", ") + ".");
     const stamped = [];
-    for (const s of (arr || [])) {
-      const rr = await resolveCollegeFromRegisterNumber(s && s.regno);
+    // One colleges read per 4-digit centre code, NOT one per student:
+    // resolveCollegeFromRegisterNumber reads the whole colleges node on every
+    // call (dbGet filters client-side, so it is a full-node network fetch), which
+    // made a 649-student import issue 649 sequential reads before its first write.
+    // Successful lookups are memoised by centre code — a lookup that fails for
+    // one student is retried for the next, so per-student error text is unchanged.
+    const collegeByCode = {};
+    const total = list.length;
+    for (let i = 0; i < total; i++) {
+      const s = list[i];
+      const code = studentRegnoClean(s && s.regno).slice(0, 4);
+      let rr = collegeByCode[code];
+      if (!rr || !rr.collegeId) {
+        rr = await resolveCollegeFromRegisterNumber(s && s.regno);
+        if (rr && rr.collegeId) collegeByCode[code] = rr;
+      }
       if (!rr.college) throw new Error("Import blocked: " + rr.error + " (Register Number " + (s && s.regno) + ")");
       stamped.push({ ...s, college_id: rr.collegeId });
+      if (onProgress) onProgress({ phase: "Resolving", done: i + 1, total });
     }
-    return dbBatchAdd("students", stamped);
+    const written = await dbBatchAdd("students", stamped);
+    console.log("[CSVUpload] stamped " + stamped.length + "/" + total + " students using "
+      + Object.keys(collegeByCode).length + " college read(s); wrote "
+      + Object.keys(written || {}).length + " paths.");
+    return written;
   },
 
   // Pushes the lightweight body of a NEW self-service registration into the
@@ -3780,27 +4251,160 @@ const Store = {
     return dbAtomicUpdate(updates);
   },
 
-  updateStudent: async (id, data) => {
+  updateStudent: async (id, data, opts) => {
+    const options = opts || {};
     // A changed register number ALWAYS recalculates the college from its first
     // 4 digits — an unknown code rejects the update so a student can never be
     // reassigned by anything other than the register number itself.
     if (data && data.regno !== undefined && String(data.regno || "").trim() !== "") {
+      // A register-number CHANGE must go through updateStudentRegno: it rewrites
+      // students/{id} ONLY, so calling this path with a new regno would leave
+      // every exam candidate list and saved seat slot pointing at the old one.
+      const current = await dbGetOne("students", id);
+      if (current && normRegno(current.regno) !== normRegno(data.regno)) {
+        throw new Error("Register-number changes must be applied through updateStudentRegno so linked exam candidate lists and seating slots migrate with the student.");
+      }
       const rr = await resolveCollegeFromRegisterNumber(data.regno);
       if (!rr.college) throw new Error(rr.error);
       return dbUpdate("students", id, { ...data, college_id: rr.collegeId });
     }
+    // A department / year / semester edit can silently detach the student from an
+    // exam whose candidate list still names them: the next generation would shrink
+    // without anyone noticing. Detect it and require an explicit acknowledgement.
+    // opts.exams lets a caller that already holds the roster skip the read;
+    // opts.skipDetachCheck is for a caller that has PRE-validated the whole batch
+    // (the CSV path) so the rule is still enforced — once, atomically.
+    const touchesEligibility = data && (data.dept !== undefined || data.year !== undefined || data.semester !== undefined);
+    if (touchesEligibility && !options.skipDetachCheck && !options.allowDetach) {
+      const current = options.current || await dbGetOne("students", id);
+      if (current) {
+        const merged = { ...current, ...data };
+        let exams = options.exams;
+        if (!exams) {
+          const c = Store.getCollegeId ? Store.getCollegeId() : null;
+          exams = await dbGet("exams", (c && c !== "default") ? [["college_id", "==", c]] : []);
+        }
+        const impact = studentExamDetachImpact(merged, exams);
+        if (impact.length) {
+          throw new Error("This change would detach " + merged.regno + " from " + impact.length + " exam candidate list(s): " + impact.map(function (x) { return x.subject; }).join(", ") + ". Update those exam group(s) first, or confirm the change knowingly.");
+        }
+      }
+    }
     return dbUpdate("students", id, data);
   },
-  deleteStudent:   (id)      => Promise.all([
-    dbDelete("students", id),
-    (Store.getCollegeId() && Store.getCollegeId() !== "default"
-      ? DB.ref("registration_queue/" + Store.getCollegeId() + "/" + String(id)).remove().catch(() => {})
-      : Promise.resolve()),
-  ]),
+  // Register-number correction: migrate the student record AND every linked
+  // reference (exam candidate lists + saved seat slots) as ONE atomic
+  // multi-location write, so a corrected student can never end up with the new
+  // register number in some places and the old one in others. Ownership of the
+  // student and of every touched exam/plan is established BEFORE any write; a
+  // migration that cannot fit in a single atomic request is REFUSED rather than
+  // written in parts.
+  updateStudentRegno: async (id, data) => {
+    if (!DB) throw new Error("Firebase Realtime DB not initialised. Check your config.");
+    const newRegno = studentRegnoClean(data && data.regno);
+    const rr = await resolveCollegeFromRegisterNumber(newRegno);
+    if (!rr.college) throw new Error(rr.error);
+    const colId = Store.getCollegeId ? Store.getCollegeId() : null;
+    if (colId && AUTH.currentUser?.uid !== DEV_UID) {
+      const snap = await DB.ref("students/" + id + "/college_id").get();
+      if (snap.exists() && snap.val() !== colId) throw new Error("Permission denied: record belongs to another college.");
+    }
+    const current = await dbGetOne("students", id);
+    if (!current) throw new Error("Student not found.");
+    if (normRegno(current.regno) === normRegno(newRegno)) {
+      return dbUpdate("students", id, { ...data, college_id: rr.collegeId });
+    }
+    // Scope to the exams that belong to THIS student's college (server-filtered
+    // when indexed) and read the whole plan node once — the same read pattern
+    // deleteExam/deleteStudent use. The college_id filter is applied even in a
+    // developer/default context so a foreign college's candidate lists and plans
+    // can never be touched.
+    const allExams = await dbGet("exams", (colId && colId !== "default") ? [["college_id", "==", colId]] : []);
+    const ownedExams = allExams.filter(function (e) { return e && String(e.college_id) === String(rr.collegeId); });
+    const ownedIds = new Set(ownedExams.map(function (e) { return e && e.id; }));
+    const planDocsAll = await dbGet("seating_plans", []);
+    const planDocs = planDocsAll.filter(function (p) { return p && ownedIds.has(p.exam_id); });
+    const newStudent = { ...current, ...data, regno: newRegno, college_id: rr.collegeId };
+    const mig = regnoMigrationUpdates({ student: current, newStudent: newStudent, exams: ownedExams, planDocs: planDocs });
+    const nPaths = Object.keys(mig.updates).length;
+    if (nPaths > 200) {
+      throw new Error("Register-number change touches " + nPaths + " database locations and cannot be written atomically. No changes were made.");
+    }
+    await dbAtomicUpdate(mig.updates);
+    return { id: id, regno: newRegno, exams: mig.examIds, plans: mig.planIds, seats: mig.seatsMigrated };
+  },
+  // Repair ONE exam's stale candidate list: replace a register number that has no
+  // student record with the real student's register number, as ONE atomic write to
+  // exams/{id}/registerNumbers and studentCount. Ownership is established BEFORE
+  // any write (the exam must belong to the active college, or the caller must be
+  // the developer), and the replacement must resolve to a real student in the
+  // exam's own college. Nothing else is touched — no student, plan, hall or other
+  // exam — so the operator then regenerates that one exam. This is the exam-side
+  // counterpart to updateStudentRegno, for a correction that was missed at the time.
+  replaceExamCandidate: async (examId, oldRegno, newRegno) => {
+    if (!DB) throw new Error("Firebase Realtime DB not initialised. Check your config.");
+    const colId = Store.getCollegeId ? Store.getCollegeId() : null;
+    const exam = await dbGetOne("exams", examId);
+    if (!exam) throw new Error("Exam not found.");
+    if (colId && colId !== "default" && AUTH.currentUser?.uid !== DEV_UID) {
+      if (exam.college_id && String(exam.college_id) !== String(colId)) throw new Error("Permission denied: record belongs to another college.");
+    }
+    const scopeCollege = (colId && colId !== "default") ? colId : exam.college_id;
+    const roster = await dbGet("students", scopeCollege ? [["college_id", "==", scopeCollege]] : []);
+    const res = examCandidateCorrection(exam, oldRegno, newRegno, roster);
+    if (!res.ok) throw new Error(res.error);
+    await dbAtomicUpdate(res.updates);
+    return { examId: examId, replacedRegno: oldRegno, regno: newRegno, studentCount: res.studentCount, student: res.student };
+  },
 
-  bulkDeleteStudents: (ids) => {
+  // Deleting a student who is still named by an exam candidate list or a saved
+  // seat slot is refused by default: removing the record alone would leave the
+  // exam/plan pointing at a now-missing identity (the exact silent loss this
+  // release guards against). opts.force records an explicit, visible decision.
+  deleteStudent: async (id, opts) => {
+    const options = opts || {};
+    if (!options.force) {
+      const current = await dbGetOne("students", id);
+      if (current) {
+        const c = Store.getCollegeId ? Store.getCollegeId() : null;
+        const exams = await dbGet("exams", (c && c !== "default") ? [["college_id", "==", c]] : []);
+        const planDocs = await Store.getAllSeatingPlans();
+        const impact = studentReferenceImpact(current, exams, planDocs);
+        if (impact.referenced) {
+          const where = [];
+          if (impact.exams.length) where.push(impact.exams.length + " exam candidate list(s) (" + impact.exams.map(function (x) { return x.subject; }).join(", ") + ")");
+          if (impact.plans.length) where.push(impact.plans.length + " saved seating plan(s)");
+          throw new Error("Cannot delete " + (current.regno || "this student") + " — still referenced by " + where.join(" and ") + ". Remove the student from those exams/plans first, or confirm the deletion knowingly.");
+        }
+      }
+    }
+    return Promise.all([
+      dbDelete("students", id),
+      (Store.getCollegeId() && Store.getCollegeId() !== "default"
+        ? DB.ref("registration_queue/" + Store.getCollegeId() + "/" + String(id)).remove().catch(() => {})
+        : Promise.resolve()),
+    ]);
+  },
+
+  bulkDeleteStudents: async (ids, opts) => {
+    const options = opts || {};
     const c = Store.getCollegeId();
-    if (!c || c === "default") return Promise.reject(new Error("College not resolved. Cannot bulk delete."));
+    if (!c || c === "default") throw new Error("College not resolved. Cannot bulk delete.");
+    if (!options.force) {
+      const roster = await dbGet("students", [["college_id", "==", c]]);
+      const byId = new Map((roster || []).map(function (s) { return [String(s.id), s]; }));
+      const exams = await dbGet("exams", [["college_id", "==", c]]);
+      const planDocs = await Store.getAllSeatingPlans();
+      const blocked = [];
+      (ids || []).forEach(function (id) {
+        const s = byId.get(String(id));
+        if (!s) return;
+        if (studentReferenceImpact(s, exams, planDocs).referenced) blocked.push(s.regno || s.id);
+      });
+      if (blocked.length) {
+        throw new Error("Cannot delete " + blocked.length + " student(s) still referenced by an exam candidate list or a saved seating plan: " + blocked.join(", ") + ". Remove them from those exams/plans first, or confirm knowingly.");
+      }
+    }
     const updates = {};
     (ids || []).forEach(id => {
       updates["students/" + id] = null;
@@ -3873,6 +4477,11 @@ const Store = {
     return rows?.[0]?.plan || null;
   },
   async setSeatingPlan(examId, plan) {
+    // Ownership gate FIRST: a plan may only ever be written for an exam that
+    // belongs to the active college (developer excepted). If the active college
+    // or the exam's ownership cannot be established the write is refused before
+    // any read-for-upsert or write happens. See assertSeatingPlanOwnership.
+    await assertSeatingPlanOwnership(examId);
     // Upsert: find existing doc and overwrite, or create new
     const existing = await dbGet("seating_plans", [["exam_id","==",examId]]);
     if (existing && existing.length > 0) {
@@ -4025,6 +4634,29 @@ function sideBySideRulesActive(students, rules) {
   const hasDeptRule = !!rules.benchAdjacency || !!rules.noSameDept;
   const hasYearRule = !!rules.noSameYear;
   return (hasDeptRule && depts.size >= 2) || (hasYearRule && years.size >= 2);
+}
+
+// Column-wise department separation. A department side-by-side rule (No Same
+// Department or CAT Bench Adjacency) is requested AND the roster really sorts
+// into >= 2 distinct raw departments — the exact situation where interleaving
+// used to scatter alternating departments down one vertical column. In this
+// mode every vertical column (fixed bench column A/B/... + fixed seat slot,
+// spanning all rows front-to-back) is filled with exactly ONE canonical
+// department (AID S / AIDS share a column, matching canonicalDept) instead of
+// taking the next interleaved student, so no seat is ever directly behind a
+// student of a different department. A single-canonical-department paper is
+// trivially pure and does not need the mode; a year-only rule never triggers
+// it (columns are never interleaved by year).
+function deptColumnModeActive(students, rules) {
+  if (!rules || !(rules.benchAdjacency || rules.noSameDept)) return false;
+  if (!students || students.length < 2) return false;
+  const raw = new Set();
+  const canon = new Set();
+  students.forEach(function (st) {
+    raw.add(String(st.dept == null ? "GEN" : st.dept).trim().toUpperCase() || "GEN");
+    canon.add(canonicalDept(st.dept));
+  });
+  return raw.size >= 2 && canon.size >= 2;
 }
 
 // Explicit impossibility instead of a silent rule drop: an enabled
@@ -4275,6 +4907,22 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
   // single-year paper still seats everyone instead of stranding the cohort.
   const benchAdj = sideBySideRulesActive(students, rules);
 
+  // Column-wise department separation (see deptColumnModeActive). Students are
+  // grouped by canonical department; the main scan assigns each vertical column
+  // to exactly one department instead of consuming the interleaved queue, and
+  // the retro-fill pass is bypassed because it completes empty seats with ANY
+  // legal student, which would silently re-mix a pure column.
+  const columnWiseMode = deptColumnModeActive(students, rules);
+  const deptBuckets = columnWiseMode ? new Map() : null;
+  const deptOrder = columnWiseMode ? [] : null;
+  if (columnWiseMode) {
+    students.forEach(function (st) {
+      const dk = canonicalDept(st.dept);
+      if (!deptBuckets.has(dk)) { deptBuckets.set(dk, []); deptOrder.push(dk); }
+      deptBuckets.get(dk).push(st);
+    });
+  }
+
   // Each side-by-side SUB-rule is auto-disabled independently, mirroring the
   // coarse switch above: "No Same Department" applies only when the roster holds
   // ≥2 distinct departments, and "No Same Year" only when it holds ≥2 distinct
@@ -4396,6 +5044,63 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
       const nSlots = seatsPerCol[ci] || 1;
       for (let si = 1; si <= nSlots && !stopHere && !hallFull; si++) {
         if (blockedSeatsPerCol[ci].has(si - 1)) continue;
+        if (columnWiseMode) {
+          // ── COLUMN-WISE DEPARTMENT SEPARATION ────────────────────────────
+          // A vertical column (ci,si) is the same physical seat position down
+          // ALL rows (A1.1, A2.1, ... A5.1 for column A slot 1). It is assigned
+          // to the canonical department with the LARGEST remaining demand that
+          // (a) still has students and (b) can legally occupy at least one
+          // still-free row (legalFor's facing-seat model). Ties are broken by
+          // the deterministic deptOrder (first-seen order), so a given roster
+          // always yields the same layout. Committing columns to the
+          // departments that actually need them (instead of a blind round-robin
+          // cycle) stops a high-demand department from being stranded while
+          // lower-demand departments hold surplus full columns. The column is
+          // then filled top row down with that department's earliest legal
+          // students (regno order preserved within the department). STRICT
+          // purity: if the department runs out mid-column the remaining rows
+          // are left EMPTY — a column is never completed with a different
+          // department.
+          let committedDept = null, committedLeft = -1;
+          for (let t = 0; t < deptOrder.length; t++) {
+            const dk = deptOrder[t];
+            const b = deptBuckets.get(dk);
+            if (!b.length) continue;
+            let canSit = false;
+            for (let pr = 0; pr < nRows && !canSit; pr++) {
+              const probeBench = ci * nRows + pr + 1;
+              if (takenSeats.has(hall.id + "-B" + probeBench + "S" + si)) continue;
+              for (let j = 0; j < b.length && !canSit; j++) {
+                if (legalFor(hall.id, ci, pr, si, b[j], seatsPerCol)) canSit = true;
+              }
+            }
+            if (canSit && b.length > committedLeft) { committedDept = dk; committedLeft = b.length; }
+          }
+          if (committedDept === null) { anyRuleRejected = true; continue; }
+          const dlist = deptBuckets.get(committedDept);
+          for (let ri = 0; ri < nRows && !stopHere && !hallFull; ri++) {
+            if (cursor >= students.length) { stopHere = true; break; }
+            const benchNo = ci * nRows + ri + 1;   // column-first bench numbering
+            const seatNo = hall.id + "-B" + benchNo + "S" + si;
+            if (takenSeats.has(seatNo)) continue;  // seat already used by another exam
+            if (!dlist.length) break;              // STRICT: dept exhausted mid-column
+            let pick = -1;
+            for (let j = 0; j < dlist.length; j++) {
+              if (legalFor(hall.id, ci, ri, si, dlist[j], seatsPerCol)) { pick = j; break; }
+            }
+            if (pick < 0) { anyRuleRejected = true; continue; }
+            const st = dlist[pick];
+            dlist.splice(pick, 1);
+            const slot = makeSlot(st, hall, ci, ri, si, benchNo, seatNo);
+            seats.push(slot);
+            if (!hallGrid[ci + "_" + ri]) hallGrid[ci + "_" + ri] = [];
+            hallGrid[ci + "_" + ri].push(slot);
+            cursor++;
+            placedInHall++;
+            if (placedInHall >= hallCap) hallFull = true;
+          }
+          continue;
+        }
         for (let ri = 0; ri < nRows && !stopHere && !hallFull; ri++) {
           const benchNo = ci * nRows + ri + 1;   // column-first bench numbering
           if (cursor >= students.length) { stopHere = true; break; }   // no more students anywhere
@@ -4492,7 +5197,10 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
   // order, honours the usable-capacity bound, skips blocked/aisle and reserved
   // seats, and runs inside each gender block — so gender-hall separation, shared
   // hall ownership and validation are all preserved.
-  if (!stopHere && cursor < students.length) {
+  // COLUMN-WISE MODE: this pass is bypassed entirely. It completes any free seat
+  // with the earliest LEGAL student, which would silently re-mix a vertical
+  // column that the strict rule has committed to one department.
+  if (!columnWiseMode && !stopHere && cursor < students.length) {
     let progress = true;
     while (progress) {
       progress = false;
@@ -4581,8 +5289,23 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
       ? "No legal seat satisfies the active rules (No Same Department / No Same Year Side-by-Side) — manual placement required"
       : "Hall capacity exhausted (eligible halls have no remaining seat for this student)";
     const lastHall = halls.length ? halls[halls.length - 1] : null;
-    for (let u = cursor; u < students.length; u++) {
-      unplaced.push({ student: students[u], reason: reason, hallName: lastHall ? lastHall.name : "" });
+    if (columnWiseMode) {
+      // In column mode students are consumed OUT of their canonical-department
+      // buckets, not out of the `students` array, so the raw array tail is NOT
+      // the leftover set (it would double-report already-seated students and
+      // miss the departments' real remainders). Derive the unplaced roster from
+      // what is actually left in the buckets, in the same insertion order the
+      // allocator used, so the reported roster is exactly the unseated one.
+      for (const dk of deptOrder) {
+        const bl = deptBuckets.get(dk);
+        for (let bi = 0; bi < bl.length; bi++) {
+          unplaced.push({ student: bl[bi], reason: reason, hallName: lastHall ? lastHall.name : "" });
+        }
+      }
+    } else {
+      for (let u = cursor; u < students.length; u++) {
+        unplaced.push({ student: students[u], reason: reason, hallName: lastHall ? lastHall.name : "" });
+      }
     }
   }
 
@@ -4594,7 +5317,14 @@ function placeStudentsInHalls(students, halls, startIdx, hallUsedSeats, rules) {
   // candidates, or eligible students remain who have no legal seat anywhere.
   const hallEmptySeats = [];
   if (hallCtxList.length) {
-    const remaining = students.length - cursor;
+    // The genuinely unseated remainder. In column mode it is the sum of what each
+    // canonical-department bucket still holds (the array tail is not accurate),
+    // otherwise the raw queue length after the scan's cursor.
+    let remaining = students.length - cursor;
+    if (columnWiseMode) {
+      remaining = 0;
+      for (const dk of deptOrder) remaining += deptBuckets.get(dk).length;
+    }
     for (const ctx of hallCtxList) {
       const occupied = ctx.seats.length;
       let reserved = 0;
@@ -4844,7 +5574,15 @@ function generateSmartSeating(groups, halls, hallUsedSeats) {
   //     so no department ever arrives in a run and the seat rule does not have
   //     to strand half the cohort. Register number stays the within-department
   //     order. Runs without a department rule keep strict regno order unchanged.
-  allStudents = interleaveByDepartment(allStudents, rules);
+  //     COLUMN-WISE MODE: the interleaved queue is INTENTIONALLY not built — the
+  //     allocator groups by canonical department and fills each vertical column
+  //     with one department, so interleaving here would only scatter students.
+  if (deptColumnModeActive(allStudents, rules)) {
+    // column-wise separation owns the order; strict regno order kept for the
+    // per-department buckets (byRegNo is preserved inside each column).
+  } else {
+    allStudents = interleaveByDepartment(allStudents, rules);
+  }
 
   const plan = {};
   const unplaced = [];
@@ -4959,6 +5697,90 @@ function examHallTypePool(exam) {
   return list.length ? list : ["University"];
 }
 
+// Human-readable date and session for the exam cards and the bulk-seating
+// header. The stored date is ISO (YYYY-MM-DD). Anything that is not exactly an
+// ISO day — a multi-day window ("2026-10-06 to 2026-10-16") or a blank — is
+// returned untouched, so a genuine range is never collapsed into one day.
+const EXAM_MONTHS_LONG = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+function examDateLong(d) {
+  const s = String(d == null ? "" : d).trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return s;
+  const day = parseInt(m[3], 10), mon = parseInt(m[2], 10);
+  if (!day || mon < 1 || mon > 12) return s;
+  return day + " " + EXAM_MONTHS_LONG[mon - 1] + " " + m[1];
+}
+function examSessionLong(s) {
+  const raw = String(s == null ? "" : s).trim();
+  const v = raw.toUpperCase();
+  if (v === "FN") return "FN (Morning)";
+  if (v === "AN") return "AN (Afternoon)";
+  return raw;
+}
+
+// ── Exam Sessions grouping (EXAMS PAGE) ──────────────────────────────────────
+// The Exams page renders compact rows grouped by exam date (native YYYY-MM-DD
+// value) and then by session (FN/AN), instead of one big card per exam. These
+// pure helpers decide the grouping order and the human-readable headings. The
+// page NEVER merges or rewrites exam records — every exam stays its own object
+// with its own id, date, session, groups and plan linkage, so saved seating
+// plans and exam-to-plan relationships are untouched.
+const EXAM_DAYS_LONG = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+function examWeekday(d) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d == null ? "" : d).trim());
+  if (!m) return "";
+  const y = parseInt(m[1], 10), mo = parseInt(m[2], 10), da = parseInt(m[3], 10);
+  if (!da || mo < 1 || mo > 12) return "";
+  const dt = new Date(y, mo - 1, da);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== da) return "";
+  return EXAM_DAYS_LONG[dt.getDay()];
+}
+function examDateHeading(d) {
+  const long = examDateLong(d);
+  const w = examWeekday(d);
+  return w ? (w + ", " + long) : long;
+}
+function examDateSortKey(d) {
+  const s = String(d == null ? "" : d).trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ("\uffff" + s);
+}
+function examGroupsByDateSession(exams) {
+  const byDate = new Map();
+  (exams || []).forEach(function (ex) {
+    if (!ex) return;
+    const date = bulkCanonDate(ex.date);
+    const session = bulkCanonSession(ex.session);
+    if (!byDate.has(date)) byDate.set(date, new Map());
+    const bySession = byDate.get(date);
+    if (!bySession.has(session)) bySession.set(session, []);
+    bySession.get(session).push(ex);
+  });
+  const dates = Array.from(byDate.keys()).sort(function (a, b) {
+    const ka = examDateSortKey(a), kb = examDateSortKey(b);
+    return ka < kb ? -1 : (ka > kb ? 1 : 0);
+  });
+  return dates.map(function (date) {
+    // Sessions on the same date stay SEPARATE subgroups: FN sorts before AN,
+    // and any unknown session sorts after the two real ones.
+    const sessions = Array.from(byDate.get(date).entries()).sort(function (x, y) {
+      const sa = x[0], sb = y[0];
+      if (sa === sb) return 0;
+      if (sa === "FN") return -1; if (sb === "FN") return 1;
+      if (sa === "AN") return -1; if (sb === "AN") return 1;
+      return sa < sb ? -1 : 1;
+    }).map(function (entry) {
+      return { session: entry[0], exams: entry[1] };
+    });
+    return {
+      date: date,
+      sessions: sessions,
+      // Flattened in session order; the exams inside each session keep their
+      // original array order (never sorted or rewritten).
+      exams: sessions.reduce(function (a, s) { return a.concat(s.exams); }, []),
+    };
+  });
+}
+
 function bulkCanonDate(d) { return String(d == null ? "" : d).trim(); }
 function bulkCanonSession(s) { return String(s == null ? "" : s).trim().toUpperCase(); }
 
@@ -5058,10 +5880,12 @@ function bulkExamRows(exams, date, students, halls, plansById, session) {
     return bulkCanonSession(exam.session) === wantSession;
   });
   return list.map(function (exam) {
-    const matched = bulkExamStudents(exam, students, lookups);
+    const audit = examCandidateAudit(exam, students, lookups);
+    const matched = audit.matched;
     const hasPlan = !!(plansById && plansById[exam.id]);
     let eligible = true, reason = "";
     if (exam.status === "cancelled" || exam.cancelled) { eligible = false; reason = "Cancelled"; }
+    else if (!audit.ok) { eligible = false; reason = audit.problems[0].message; }
     else if (!matched.length) { eligible = false; reason = "No eligible students matched"; }
     const depts = [];
     (exam.groups || []).forEach(function (g) {
@@ -5080,6 +5904,14 @@ function bulkExamRows(exams, date, students, halls, plansById, session) {
       ineligibleReason: reason,
       hallCapacity: bulkExamHallCapacity(exam, halls),
       capacityWarnings: hallCapacityWarningsFor(exam, halls),
+      // registerNumbers entries with no student record. Surfaced (never
+      // auto-removed) so the shrink is visible BEFORE regeneration.
+      staleCandidates: audit.unresolved,
+      // Listed students whose current dept/year no longer matches the exam groups.
+      ineligibleCandidates: audit.ineligible,
+      // Every reason the candidate list is not safe to seat (blocks generation).
+      candidateProblems: audit.problems,
+      candidateWarnings: audit.warnings,
       explicitHalls: (exam.hallids || []).length,
     };
   });
@@ -5243,6 +6075,7 @@ function bulkHallSelectionData(cfg) {
   const selectedHallIds = new Set((c.selectedHallIds || []).map(function (x) { return String(x); }));
   const loadComplete = c.loadComplete !== false;
   const lookups = c.lookups || bulkBuildLookups(students, allExams, halls);
+  const rules = c.rules || {};
 
   const sessionExams = bulkSessionExams(allExams, date, session);
   const selectedExams = sessionExams.filter(function (e) { return selectedExamIds.has(String(e.id)); });
@@ -5260,8 +6093,23 @@ function bulkHallSelectionData(cfg) {
     const cid = String(canonicalHallId(halls, h.id, h));
     if (seen.has(cid)) return;   // collapse alias records to one physical hall
     seen.add(cid);
-    const type = h.hallType || "University";
-    const usable = calcHallCapacity(h);
+    // One physical hall is often stored as SEVERAL records with different ids but
+    // the same resolved identity (imports can leave a per-department copy). Every
+    // type consumer — the co-seated generator pool, bulkSelectHalls and the
+    // single-exam auto pick — evaluates EACH record's own hallType. The picker's
+    // single row must apply the SAME rule: the physical hall is eligible for the
+    // exam's hall types iff at least one of its records is. Using only the
+    // first-encountered record's type hid a CAT twin behind a University alias
+    // (and vice versa), so the row disagreed with the generator.
+    const records = (halls || []).filter(function (x) { return x && String(canonicalHallId(halls, x.id, x)) === cid; });
+    let source = resolveHall(halls, h.id, h) || h;
+    if (!typesUsed.has(source.hallType || "University")) {
+      for (let i = 0; i < records.length; i++) {
+        if (typesUsed.has(records[i].hallType || "University")) { source = records[i]; break; }
+      }
+    }
+    const type = source.hallType || "University";
+    const usable = calcHallCapacity(source);
     const usedKeys = occupied[cid] ? occupied[cid].size : 0;
     const remaining = Math.max(0, usable - usedKeys);
     const eligible = bulkRoomsEligible(selectedExams, students, lookups, type);
@@ -5269,11 +6117,11 @@ function bulkHallSelectionData(cfg) {
     if (!loadComplete) { selectable = false; reason = "Existing seating plans could not be fully loaded; generation is disabled until they reload."; }
     else if (!selectedExams.length) { selectable = false; reason = "Select at least one exam first."; }
     else if (!typesUsed.has(type)) { selectable = false; reason = "No selected exam uses " + type + " halls."; }
-    else if (usable <= 0) { selectable = false; reason = (hallCapacityConfigError(h) || "Hall has no usable seats."); }
+    else if (usable <= 0) { selectable = false; reason = (hallCapacityConfigError(source) || "Hall has no usable seats."); }
     else if (remaining <= 0) { selectable = false; reason = "Hall is fully occupied for this date and session."; }
     hallRows.push({
-      id: cid, hall: h, name: h.name || h.id, type: type,
-      physical: hallPhysicalCapacity(h), usable: usable, occupied: usedKeys, remaining: remaining,
+      id: cid, hall: source, name: source.name || source.id, type: type,
+      physical: hallPhysicalCapacity(source), usable: usable, occupied: usedKeys, remaining: remaining,
       eligible: eligible, selectable: selectable, reason: reason,
       selected: selectable && selectedHallIds.has(cid),
     });
@@ -5297,22 +6145,159 @@ function bulkHallSelectionData(cfg) {
       + " student(s) are eligible. Add halls or reduce the exam selection.");
   }
 
+  // Strict-column feasibility check: with a department rule active the hall
+  // picker's free-seat count is not what the allocator can actually use. Warn
+  // (never block) that the selection lacks enough complete columns per
+  // canonical department, and say how many more halls close the gap.
+  const columnEstimate = (selectedExams.length && chosen.length) ? bulkColumnCapacityEstimate({
+    exams: selectedExams, students: students, halls: chosen.map(function (r) { return r.hall; }).filter(Boolean),
+    rules: rules,
+  }) : { active: false, demand: demand, perDepartment: [], estimate: true, sufficient: true, requiredColumns: 0, columnsAvailable: 0, gapColumns: 0 };
+
+  const columnWarnings = [];
+  if (columnEstimate.active && !columnEstimate.sufficient) {
+    columnWarnings.push("Strict columns: selected halls give " + columnEstimate.columnsAvailable
+      + " usable column(s) but the demand needs an estimated " + columnEstimate.requiredColumns
+      + " (per department: " + columnEstimate.perDepartment.map(function (r) { return r.dept + " ~" + r.requiredColumns; }).join(", ")
+      + "). " + String(columnEstimate.gapColumns > 0 ? "To satisfy the department rule, " + (columnEstimate.gapMessage || "add more columns") + "." : "")
+      + (columnEstimate.caveat || ""));
+  }
+
   return {
     sessionExams: sessionExams, selectedExams: selectedExams,
     demand: demand, rosterCount: roster.count, duplicates: roster.duplicates,
     hallRows: hallRows,
+    columnEstimate: columnEstimate,
     totals: {
       selectedHalls: chosen.length, combinedUsable: combinedUsable, occupied: occupiedSeats,
       remaining: remainingSeats, demand: demand, canAccommodate: canAccommodate,
       shortfall: shortfall, freeAfter: Math.max(0, remainingSeats - demand),
       capacityStatus: capacityStatus, estimate: true,
     },
-    validation: { ok: errors.length === 0, errors: errors },
+    validation: { ok: errors.length === 0, errors: errors, warnings: columnWarnings },
   };
 }
 
+// Feasibility estimate under STRICT column-wise department separation. A vertical
+// column may hold exactly one canonical department, so a seat is only realisable
+// for a department when the selection provides a whole column for it. Measuring
+// free seats is therefore NOT the same as measuring realisable capacity once a
+// department rule ("No Same Department Side-by-Side" / "CAT Bench Adjacency")
+// is active. This estimates the number of complete columns the selected halls'
+// usable geometry can provide, the complete columns each canonical department
+// needs, and the gap (with an actionable "how many more halls" figure). It is
+// deliberately an ESTIMATE: reservations, gender splitting and bench adjacency
+// can only raise the true requirement, so the callers label it as such and never
+// treat it as a guarantee or block generation on it.
+function bulkColumnCapacityEstimate(cfg) {
+  const c = cfg || {};
+  const exams = c.exams || c.allExams || [];
+  const students = c.students || [];
+  const halls = c.halls || [];
+  const rules = c.rules || {};
+  const selectedHallIds = new Set((c.selectedHallIds || []).map(function (x) { return String(x); }));
+  const lookups = c.lookups || bulkBuildLookups(students, exams, halls);
+
+  const roster = bulkDedupeRoster(exams, students, lookups);
+  const eligible = roster.students || [];
+  const deptCounts = new Map();
+  eligible.forEach(function (st) {
+    const dk = canonicalDept(st.dept);
+    deptCounts.set(dk, (deptCounts.get(dk) || 0) + 1);
+  });
+  const canonicalDepts = Array.from(deptCounts.keys());
+  const columnModeActive = canonicalDepts.length >= 2 && (rules.noSameDept || rules.benchAdjacency);
+
+  const base = {
+    active: columnModeActive,
+    demand: roster.count,
+    perDepartment: [],
+    estimate: true,
+    caveat: "Estimate only: reservations, gender splitting and bench adjacency can only raise the real requirement.",
+  };
+
+  if (!columnModeActive) { base.requiredColumns = 0; base.columnsAvailable = 0; base.gapColumns = 0; base.sufficient = true; return base; }
+
+  // Usable column count + usable seats of the SELECTED halls, collapsing aliases
+  // exactly like the allocator does (one physical hall at most once).
+  let totalColumns = 0, totalUsable = 0, colsPerHallSum = 0, colsPerHallCount = 0;
+  const seenHalls = new Set();
+  (halls || []).forEach(function (h) {
+    if (!h) return;
+    const cid = String(canonicalHallId(halls, h.id, h));
+    if (seenHalls.has(cid)) return;
+    seenHalls.add(cid);
+    const picked = selectedHallIds.size === 0
+      ? true
+      : (selectedHallIds.has(cid) || selectedHallIds.has(String(h.id)));
+    if (!picked) return;
+    const inv = hallSeatInventory(h);
+    const nCols = inv.columns.reduce(function (n, ccol) { return n + (ccol.seats || 0); }, 0);
+    const usable = hallUsableCapacity(h);
+    if (usable <= 0 || nCols <= 0) return;
+    totalColumns += nCols;
+    totalUsable += usable;
+    colsPerHallSum += nCols;
+    colsPerHallCount += 1;
+  });
+  base.columnsAvailable = totalColumns;
+  base.usableSeats = totalUsable;
+
+  if (totalColumns <= 0 || totalUsable <= 0) { base.requiredColumns = 0; base.gapColumns = 0; base.sufficient = true; return base; }
+
+  const avgColumnCapacity = totalUsable / totalColumns; // mean usable seats per complete column
+
+  // Bucket the demand the same way generation partitions it. When split-gender
+  // is active the allocator seats each gender across its own hall range, so the
+  // columns needed are the SUM of each gender bucket's ceil — a single combined
+  // per-department column count would understate the real requirement.
+  const bucketCounts = new Map();
+  eligible.forEach(function (st) {
+    const dk = canonicalDept(st.dept);
+    const gk = rules.splitGender ? String(st.gender == null ? "" : st.gender) : "";
+    const bk = gk + "|" + dk;
+    bucketCounts.set(bk, (bucketCounts.get(bk) || 0) + 1);
+  });
+  const reqByDept = new Map();
+  bucketCounts.forEach(function (n, bk) {
+    const dk = bk.slice(bk.indexOf("|") + 1);
+    const cols = Math.max(0, Math.ceil(n / avgColumnCapacity));
+    if (!reqByDept.has(dk)) reqByDept.set(dk, { eligible: 0, requiredColumns: 0 });
+    const rec = reqByDept.get(dk);
+    rec.eligible += n;
+    rec.requiredColumns += cols;
+  });
+  const req = Array.from(reqByDept.entries()).map(function (e) {
+    return { dept: e[0], eligible: e[1].eligible, requiredColumns: e[1].requiredColumns };
+  }).sort(function (a, b) {
+    return b.requiredColumns - a.requiredColumns || (a.dept < b.dept ? -1 : a.dept > b.dept ? 1 : 0);
+  });
+  base.perDepartment = req;
+  base.requiredColumns = req.reduce(function (n, r) { return n + r.requiredColumns; }, 0);
+  base.gapColumns = Math.max(0, base.requiredColumns - base.columnsAvailable);
+  base.sufficient = base.gapColumns <= 0;
+
+  if (base.gapColumns > 0) {
+    const avgColsPerHall = colsPerHallCount ? colsPerHallSum / colsPerHallCount : 1;
+    const extraHalls = Math.ceil(base.gapColumns / Math.max(1, avgColsPerHall));
+    base.extraHalls = extraHalls;
+    base.gapMessage = "add " + extraHalls + " hall(s) of ~" + Math.max(1, Math.round(avgColsPerHall))
+      + " column(s) each (≈ " + base.gapColumns + " more usable column(s)) of this hall type";
+  }
+  return base;
+}
+
 function bulkGenerateOne(exam, students, halls, rules, allExams, plansById, lookups) {
-  const matched = bulkExamStudents(exam, students, lookups);
+  // Candidate gate: never generate from a candidate list that no longer resolves
+  // cleanly against the current roster. A stale/ghost/ambiguous entry is a data
+  // problem to fix, not a student to silently drop.
+  const audit = examCandidateAudit(exam, students, lookups);
+  if (!audit.ok) {
+    return { ok: false, code: "candidate_mismatch", category: "CANDIDATE_MISMATCH",
+      reason: audit.problems[0].message, problems: audit.problems.map(function (p) { return p.message; }),
+      audit: audit, matched: audit.matched };
+  }
+  const matched = audit.matched;
   if (!matched.length) {
     return { ok: false, code: "no_students", reason: "No eligible students matched this exam's groups", matched: [] };
   }
@@ -5525,9 +6510,12 @@ async function runBulkSeatingCoSeated(cfg) {
     const tagged = [], examMatched = new Map(), rosterSeen = new Map();
     let rosterError = "";
     active.forEach(function(e) {
-      const matched = bulkExamStudents(e,students,lookups);
-      examMatched.set(String(e.id),matched);
-      matched.forEach(function(s) {
+      // Audit the candidate list FIRST: a stale/ghost/ambiguous entry blocks this
+      // exam (never silently drops the student from the combined pool).
+      const audit = examCandidateAudit(e,students,lookups);
+      examMatched.set(String(e.id),audit.matched);
+      if (!audit.ok) { rosterError = rosterError || audit.problems[0].message; return; }
+      audit.matched.forEach(function(s) {
         const reg = normRegno(s.regno);
         if (reg && rosterSeen.has(reg)) {
           rosterError = "Duplicate student " + s.regno + " appears in more than one exam in this date/session pool.";
@@ -5872,6 +6860,316 @@ function regnoError(raw) {
 function regnoBatch(raw) {
   const v = studentRegnoClean(raw);
   return (/^\d+$/.test(v) && v.length >= 6) ? v.slice(4, 6) : "";
+}
+
+// ── REGISTER-NUMBER MIGRATION (pure) ─────────────────────────────────────────
+// A student's register number is DENORMALISED: it is copied into every exam's
+// registerNumbers[] candidate list and into every saved seat slot. Correcting a
+// register number must therefore migrate all three (student record + candidate
+// lists + seat slots) TOGETHER, or the next regeneration silently drops the
+// corrected student and every candidate with no student record. These helpers
+// compute the whole migration as plain data so the single atomic write can be
+// asserted outside a browser.
+//
+// Student-derived fields that are safe to refresh on an existing seat slot. Seat
+// geometry (hall, bench, row, column, seat label/number, examId) is NEVER in
+// this set, so a migrated seat keeps its physical seat exactly.
+const REGNO_SEAT_FIELDS = ["name", "gender", "dept", "year", "semester", "batch", "college_id", "section"];
+
+// Deep-walk a saved plan and re-key every seat that references oldRegno. A seat
+// is any object carrying a `regno` property; plain string lists (and any other
+// scalar/subtree) are left untouched. Returns the migrated plan and the number
+// of seats changed. Never ADDS a seat — a student with no saved allocation stays
+// unallocated.
+function migratePlanSeatRefs(plan, oldRegno, newRegno, student) {
+  const oldN = normRegno(oldRegno);
+  let count = 0;
+  function walk(node) {
+    if (Array.isArray(node)) return node.map(walk);
+    if (node && typeof node === "object") {
+      const isSeat = Object.prototype.hasOwnProperty.call(node, "regno");
+      const hit = isSeat && normRegno(node.regno) === oldN;
+      if (hit) count++;
+      const out = {};
+      Object.keys(node).forEach(function (k) {
+        if (hit && k === "regno") { out[k] = newRegno; return; }
+        if (hit && REGNO_SEAT_FIELDS.indexOf(k) >= 0 && student && student[k] !== undefined) { out[k] = student[k]; return; }
+        out[k] = walk(node[k]);
+      });
+      return out;
+    }
+    return node;
+  }
+  return { plan: walk(plan), count: count };
+}
+
+// The student (if any) already holding `newRegno`, ignoring `exceptId`. A change
+// must be REJECTED when this returns a student: silently letting two students
+// share a register number would merge their identities and their seat
+// references. (Register-number "swaps" therefore surface as an explicit refusal
+// and must be done in two steps, never as a silent overwrite.)
+function regnoChangeConflict(newRegno, students, exceptId) {
+  const n = normRegno(newRegno);
+  if (!n) return null;
+  for (const s of (students || [])) {
+    if (!s || s.id === exceptId) continue;
+    if (normRegno(s.regno) === n) return s;
+  }
+  return null;
+}
+
+// The complete, atomic migration for one register-number correction:
+//   students/{id}                  -> the corrected student record
+//   exams/{examId}/registerNumbers -> old replaced by new (deduped, no merge)
+//   seating_plans/{docId}/plan     -> every seat re-keyed (geometry preserved)
+// `planDocs` must already be scoped to owned exams by the caller. Returns the
+// flat path->value update map plus what changed, so the caller can size-check
+// and report. Pure: reads nothing, writes nothing.
+function regnoMigrationUpdates(opts) {
+  const student = opts && opts.student;
+  const newStudent = opts && opts.newStudent;
+  const updates = {}, examIds = [], planIds = [];
+  let seatsMigrated = 0;
+  if (!student || !student.id || !newStudent) return { updates: updates, examIds: examIds, planIds: planIds, seatsMigrated: seatsMigrated };
+  const oldN = normRegno(student.regno);
+  const newRegno = newStudent.regno;
+  updates["students/" + student.id] = newStudent;
+  (opts.exams || []).forEach(function (e) {
+    if (!e || !e.id || !Array.isArray(e.registerNumbers)) return;
+    if (!e.registerNumbers.some(function (r) { return normRegno(r) === oldN; })) return;
+    const seen = new Set();
+    const next = [];
+    e.registerNumbers.forEach(function (r) {
+      const v = (normRegno(r) === oldN) ? newRegno : r;
+      const n = normRegno(v);
+      if (seen.has(n)) return;
+      seen.add(n);
+      next.push(v);
+    });
+    if (JSON.stringify(next) !== JSON.stringify(e.registerNumbers)) {
+      updates["exams/" + e.id + "/registerNumbers"] = next;
+      examIds.push(e.id);
+    }
+  });
+  (opts.planDocs || []).forEach(function (p) {
+    if (!p || !p.id || !p.plan) return;
+    const m = migratePlanSeatRefs(p.plan, student.regno, newRegno, newStudent);
+    if (m.count > 0) {
+      updates["seating_plans/" + p.id + "/plan"] = m.plan;
+      planIds.push(p.id);
+      seatsMigrated += m.count;
+    }
+  });
+  return { updates: updates, examIds: examIds, planIds: planIds, seatsMigrated: seatsMigrated };
+}
+
+// exam.registerNumbers entries with no matching student record. These are
+// REPORTED, never auto-removed and never auto-seated: an unmatched candidate is
+// a data problem to surface, because silently dropping it is exactly how a saved
+// plan shrinks without anyone noticing.
+function examStaleRegisterNumbers(exam, students) {
+  if (!exam || !Array.isArray(exam.registerNumbers)) return [];
+  const have = new Set();
+  (students || []).forEach(function (s) { const n = normRegno(s && s.regno); if (n) have.add(n); });
+  const missing = [], seen = new Set();
+  exam.registerNumbers.forEach(function (r) {
+    const n = normRegno(r);
+    if (!n || have.has(n) || seen.has(n)) return;
+    seen.add(n);
+    missing.push(r);
+  });
+  return missing;
+}
+
+// College-wide stale-candidate report, for the pre-regeneration warning surface.
+function staleRegisterNumberReport(exams, students) {
+  const out = [];
+  (exams || []).forEach(function (e) {
+    const missing = examStaleRegisterNumbers(e, students);
+    if (missing.length) out.push({ examId: e && e.id, subject: (e && (e.subjectTitle || e.subject)) || "", missing: missing, count: missing.length });
+  });
+  return out;
+}
+
+// Correct ONE exam's stale candidate list: replace a register number that has no
+// student record (a "ghost" that bulkExamStudents silently drops at seating time)
+// with the register number of the real student it should have been. This is the
+// exam-side counterpart to the student-side migration above: when a correction
+// was missed at the time, or a ghost was imported, the exam's registerNumbers[]
+// is what has to be repaired. The replacement MUST resolve to exactly one real
+// student in the exam's own college, so a ghost can never be swapped for another
+// ghost or for a student of another college. Pure: reads nothing, writes nothing.
+// Returns the flat path->value update map for ONE atomic write (candidate list +
+// studentCount together), plus the corrected list, so the applier cannot leave the
+// count and the list disagreeing.
+function examCandidateCorrection(exam, oldRegno, newRegno, students) {
+  const out = { ok: false, error: "", updates: {}, registerNumbers: null, studentCount: 0, replaced: 0, student: null };
+  if (!exam || !exam.id) { out.error = "Exam not found."; return out; }
+  if (!Array.isArray(exam.registerNumbers)) { out.error = "This exam has no candidate register-number list to correct."; return out; }
+  const oldN = normRegno(oldRegno);
+  const newN = normRegno(newRegno);
+  if (!oldN) { out.error = "Choose the candidate register number to replace."; return out; }
+  const idx = exam.registerNumbers.findIndex(function (r) { return normRegno(r) === oldN; });
+  if (idx < 0) { out.error = "Register number " + oldN + " is not in this exam's candidate list."; return out; }
+  if (newN === oldN) { out.error = "The replacement is the same register number."; return out; }
+  const re = regnoError(studentRegnoClean(newRegno));
+  if (re) { out.error = re; return out; }
+  const match = (students || []).filter(function (s) { return s && normRegno(s.regno) === newN; });
+  if (!match.length) { out.error = "No student record has register number " + newN + "."; return out; }
+  if (match.length > 1) { out.error = "Register number " + newN + " is held by more than one student record."; return out; }
+  const stu = match[0];
+  if (exam.college_id && stu.college_id && String(exam.college_id) !== String(stu.college_id)) {
+    out.error = "Register number " + newN + " belongs to a student in another college.";
+    return out;
+  }
+  // Replace the FIRST occurrence; if the replacement already appears elsewhere in
+  // the list, drop that duplicate so the list never holds the same register number
+  // twice (which would seat one student in two slots).
+  const next = [];
+  exam.registerNumbers.forEach(function (r, i) {
+    if (i === idx) { next.push(studentRegnoClean(newRegno)); return; }
+    if (normRegno(r) === newN) return;
+    next.push(r);
+  });
+  out.ok = true;
+  out.registerNumbers = next;
+  out.studentCount = next.length;
+  out.replaced = 1;
+  out.student = stu;
+  out.updates["exams/" + exam.id + "/registerNumbers"] = next;
+  out.updates["exams/" + exam.id + "/studentCount"] = next.length;
+  return out;
+}
+
+// ── CANDIDATE CONSISTENCY (single source of truth) ──────────────────────────
+// A register number is a MUTABLE key; the student id is the stable identity. The
+// schema keeps register numbers in exam.registerNumbers[] and in saved seat slots
+// (so existing data stays compatible), which means the link to a student can go
+// stale. These helpers are the ONE place that decides whether a candidate entry is
+// safe to seat. Matching (bulkExamStudents) and auditing share the SAME predicate,
+// so a candidate can never be matched by one and silently dropped by the other.
+
+// regno -> [students] index. Two records sharing one register number inside a
+// college are an AMBIGUOUS identity and are reported, never silently collapsed.
+function studentRegnoIndex(students) {
+  const byRegno = new Map();
+  (students || []).forEach(function (s) {
+    const n = normRegno(s && s.regno);
+    if (!n) return;
+    if (!byRegno.has(n)) byRegno.set(n, []);
+    byRegno.get(n).push(s);
+  });
+  const duplicates = [];
+  byRegno.forEach(function (list, n) { if (list.length > 1) duplicates.push({ regno: n, students: list }); });
+  return { byRegno: byRegno, duplicates: duplicates };
+}
+
+// Does the student currently match ANY of the exam's (dept, year) groups? Mirrors
+// the exact bucket predicate bulkExamStudents uses, so the two can never disagree.
+function examEligibilityMatch(exam, student) {
+  const groups = (exam && exam.groups) || [];
+  const d = canonicalDept(student && student.dept);
+  const y = String(student && student.year);
+  for (const g of groups) {
+    if (!g || !g.dept) continue;
+    if (canonicalDept(g.dept) === d && examGroupYear(g) === y) return true;
+  }
+  return false;
+}
+
+// Full audit of ONE exam's candidate list against the current college roster.
+// Returns the resolved roster (matched) PLUS every reason it may not be safe to
+// seat: unresolved (a listed regno with no student record), ineligible (a listed
+// student no longer matches the exam's groups), conflict (one regno held by more
+// than one record, or a cross-college record), and duplicates within the list
+// (already merged safely by the matcher). Pure: reads nothing, writes nothing.
+function examCandidateAudit(exam, students, lookups) {
+  const matched = bulkExamStudents(exam, students, lookups);
+  const problems = [], warnings = [];
+  const listed = (exam && Array.isArray(exam.registerNumbers)) ? exam.registerNumbers : [];
+  const seenListed = new Set(), normListed = [], duplicateListed = [];
+  listed.forEach(function (r) {
+    const n = normRegno(r);
+    if (!n) return;
+    if (seenListed.has(n)) { if (duplicateListed.indexOf(n) < 0) duplicateListed.push(n); return; }
+    seenListed.add(n);
+    normListed.push(n);
+  });
+  const idx = studentRegnoIndex(students || []);
+  const matchedKey = new Set();
+  matched.forEach(function (s) {
+    const n = normRegno(s && s.regno);
+    if (n) matchedKey.add(n);
+    if (s && s.id != null) matchedKey.add("id:" + String(s.id));
+  });
+  const unresolved = [], ineligible = [], conflicts = [];
+  normListed.forEach(function (n) {
+    const list = idx.byRegno.get(n) || [];
+    if (!list.length) { unresolved.push(n); return; }
+    if (list.length > 1) { conflicts.push(n); return; }
+    const st = list[0];
+    if (exam && exam.college_id && st.college_id && String(exam.college_id) !== String(st.college_id)) { conflicts.push(n); return; }
+    const isMatched = matchedKey.has(n) || (st.id != null && matchedKey.has("id:" + String(st.id)));
+    if (!isMatched) ineligible.push({ regno: n, student: st });
+  });
+  if (unresolved.length) problems.push({ code: "unresolved", regnos: unresolved,
+    message: unresolved.length + " candidate register number(s) in \"" + ((exam && (exam.subjectTitle || exam.subject)) || exam && exam.id) + "\" have no student record (" + unresolved.slice(0, 5).join(", ") + (unresolved.length > 5 ? ", …" : "") + "). Correct the candidate list before generating." });
+  if (ineligible.length) problems.push({ code: "ineligible", regnos: ineligible.map(function (x) { return x.regno; }),
+    message: ineligible.length + " candidate(s) no longer match this exam's department/year groups (" + ineligible.slice(0, 5).map(function (x) { return x.regno; }).join(", ") + (ineligible.length > 5 ? ", …" : "") + "). Update the exam groups or the student record first." });
+  if (conflicts.length) problems.push({ code: "conflict", regnos: conflicts,
+    message: conflicts.length + " candidate register number(s) are ambiguous (held by more than one record) or belong to another college (" + conflicts.join(", ") + "). Resolve those records first." });
+  if (duplicateListed.length) warnings.push({ code: "duplicate_listed", regnos: duplicateListed,
+    message: duplicateListed.length + " register number(s) appear more than once in the candidate list; the duplicate was safely merged." });
+  return { ok: problems.length === 0, matched: matched, listed: normListed.length,
+    unresolved: unresolved, ineligible: ineligible, conflicts: conflicts,
+    duplicates: duplicateListed, problems: problems, warnings: warnings };
+}
+
+// Exams a student currently appears in whose groups the student NO LONGER matches
+// after a proposed change (department / year / semester edit). These are exactly
+// the exams whose candidate list would silently drop the student at generation.
+function studentExamDetachImpact(student, exams) {
+  const out = [];
+  const n = normRegno(student && student.regno);
+  if (!n) return out;
+  (exams || []).forEach(function (e) {
+    if (!e || !Array.isArray(e.registerNumbers)) return;
+    if (!e.registerNumbers.some(function (r) { return normRegno(r) === n; })) return;
+    if (!examEligibilityMatch(e, student)) out.push({ examId: e.id, subject: e.subjectTitle || e.subject || e.id || "" });
+  });
+  return out;
+}
+
+// Does a saved seating plan name this register number in any seat slot?
+function planHasRegno(plan, regno) {
+  const n = normRegno(regno);
+  if (!n) return false;
+  const hallKeys = Object.keys(plan || {});
+  for (const hid of hallKeys) {
+    const hp = plan[hid] || {};
+    const seats = hp.seats || [];
+    for (const s of seats) { if (normRegno(s && s.regno) === n) return true; }
+  }
+  return false;
+}
+
+// Every exam candidate list and saved plan that references a student. Used before
+// a deletion so a student can never be removed from under a live allocation
+// without an explicit, visible decision.
+function studentReferenceImpact(student, exams, planDocs) {
+  const n = normRegno(student && student.regno);
+  const examRefs = [], planRefs = [];
+  if (n) {
+    (exams || []).forEach(function (e) {
+      if (e && Array.isArray(e.registerNumbers) && e.registerNumbers.some(function (r) { return normRegno(r) === n; })) {
+        examRefs.push({ examId: e.id, subject: e.subjectTitle || e.subject || e.id || "" });
+      }
+    });
+    (planDocs || []).forEach(function (p) {
+      if (p && p.plan && planHasRegno(p.plan, n)) planRefs.push({ planId: p.id, examId: p.exam_id });
+    });
+  }
+  return { exams: examRefs, plans: planRefs, referenced: examRefs.length > 0 || planRefs.length > 0 };
 }
 
 // Names are ALWAYS stored and displayed in CAPITAL LETTERS. Whitespace is
@@ -7052,7 +8350,7 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
           .filter(s => exactRegnos
             ? exactRegnos.has(String(s.regno))
             : examGroups.some(g =>
-                g.dept?.toUpperCase() === s.dept?.toUpperCase() &&
+                canonicalDept(g.dept) === canonicalDept(s.dept) &&
                 examGroupYear(g) === String(s.year)
               ))
           .map(s => s.regno)
@@ -7085,12 +8383,23 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
     const exactRegnos = (Array.isArray(exam.registerNumbers) && exam.registerNumbers.length)
       ? new Set(exam.registerNumbers.map(String)) : null;
 
+    // Candidate gate: never generate from a candidate list that no longer resolves
+    // cleanly against the current roster. A ghost/stale/ambiguous entry is a data
+    // problem to fix, not a student to silently drop from the exam.
+    const audit = examCandidateAudit(exam, students);
+    if (!audit.ok) {
+      showToast("Seating stopped — " + audit.problems[0].message, "error");
+      if (seatingPlans[exam.id]) lastSeatingGenFailure = { exam, at: Date.now() };
+      setGenerating(false); setConfirmExam(null); setRegenDiff(null);
+      return;
+    }
+
     let groups = (exam.groups||[]).map(g => {
       // Match students: exact dept + resolved year (semester mapped to year) — never pull in other years
       const sem  = examGroupSem(g);
       const gy   = examGroupYear(g);
       let matched = students.filter(s =>
-        s.dept?.toUpperCase() === g.dept.toUpperCase() &&
+        canonicalDept(s.dept) === canonicalDept(g.dept) &&
         gy === String(s.year) &&
         (!exactRegnos || exactRegnos.has(String(s.regno)))
       );
@@ -7915,7 +9224,7 @@ function AdminDashboard({ user, onLogout, students, setStudents, halls, setHalls
             {page==="subjects"   &&<SubjectsPage subjects={subjects} setSubjects={setSubjects} showToast={showToast}/>}
             {page==="seating"    &&<SeatingPage exams={exams} seatingPlans={seatingPlans} students={students} subjects={subjects} halls={halls}/>}
             {page==="hallnotice" &&<HallNoticePage halls={halls} seatingPlans={seatingPlans} exams={exams} students={students} college={college} showToast={showToast}/>}
-            {page==="globalnotice"&&<GlobalNoticePage exams={exams} seatingPlans={seatingPlans} halls={halls} college={college} showToast={showToast}/>}
+            {page==="globalnotice"&&<GlobalNoticePage exams={exams} seatingPlans={seatingPlans} halls={halls} students={students} college={college} showToast={showToast}/>}
             {page==="attendance" &&<AttendanceSheetPage exams={exams} seatingPlans={seatingPlans} students={students} college={college}/>}
             {page==="backup"     &&<BackupRestorePage students={students} setStudents={setStudents} halls={halls} setHalls={setHalls} exams={exams} setExams={setExams} seatingPlans={seatingPlans} setSeatingPlans={setSeatingPlans} showToast={showToast}/>}
             {page==="settings"   &&<CollegeSettingsPage college={college} showToast={showToast}/>}
@@ -8493,20 +9802,42 @@ function StudentsPage({ students, setStudents, showToast }) {
       if (editS) {
         const upd={...s}; if (upd.batch===undefined) delete upd.batch; delete upd.id;
         if (regnoChanged) {
+          // A register number already held by ANOTHER student is refused up-front:
+          // accepting it would silently merge two identities (and their seat
+          // references). Swaps are therefore explicit, two-step operations.
+          const conflict = regnoChangeConflict(upd.regno, students, editS.id);
+          if (conflict) { showToast("Register Number " + studentRegnoClean(upd.regno) + " already belongs to " + (conflict.name || "another student") + ". Correct that student first.", "error"); setSaving(false); return; }
           // A changed register number ALWAYS recalculates the college from its
           // first 4 digits; an unknown centre code rejects the edit up-front
           // (matched-college wins, never the admin's active college).
           const rr = await resolveCollegeFromRegisterNumber(upd.regno);
           if (!rr.college) { showToast("Student cannot be updated: " + rr.error, "error"); setSaving(false); return; }
           upd.college_id = rr.collegeId;
+          // Migrate the student record AND every linked exam candidate list and
+          // saved seat slot in one atomic write.
+          const mig = await Store.updateStudentRegno(editS.id, upd);
+          setStudents(prev=>prev.map(x=>x.id===editS.id?{...x,...upd}:x));
+          const touched = ((mig && mig.exams ? mig.exams.length : 0) + (mig && mig.plans ? mig.plans.length : 0));
+          showToast(touched ? ("Student updated · " + touched + " linked allocation record(s) migrated.") : "Student updated!");
         } else {
           // Unchanged register number keeps the student's original (possibly
           // legacy) regno and its existing matched college intact.
           delete upd.regno;
+          // A department/year/semester change that would detach the student from
+          // an exam is blocked by Store.updateStudent; surface it and let the
+          // operator proceed knowingly (the exam groups should normally be fixed
+          // first, but a genuine re-assignment is allowed with an explicit ack).
+          try {
+            await Store.updateStudent(editS.id, upd);
+          } catch (e) {
+            if (/detach/.test(e.message || "")) {
+              if (!window.confirm(e.message + "\n\nProceed with the change anyway?")) { setSaving(false); return; }
+              await Store.updateStudent(editS.id, upd, { allowDetach: true });
+            } else { throw e; }
+          }
+          setStudents(prev=>prev.map(x=>x.id===editS.id?{...x,...upd}:x));
+          showToast("Student updated!");
         }
-        await Store.updateStudent(editS.id, upd);
-        setStudents(prev=>prev.map(x=>x.id===editS.id?{...x,...upd}:x));
-        showToast("Student updated!");
       } else {
         if (students.find(x=>x.regno===s.regno && x.id!==editS?.id)) { showToast("This Register Number is already registered.","error"); setSaving(false); return; }
         s.id=uid();
@@ -8523,7 +9854,14 @@ function StudentsPage({ students, setStudents, showToast }) {
   async function doDeleteOne(s) {
     setProcessing(true);
     try {
-      await Store.deleteStudent(s.id);
+      try {
+        await Store.deleteStudent(s.id);
+      } catch (e) {
+        if (/referenced/.test(e.message || "")) {
+          if (!window.confirm(e.message + "\n\nDelete the student anyway?")) { setProcessing(false); return; }
+          await Store.deleteStudent(s.id, { force: true });
+        } else { throw e; }
+      }
       setStudents(prev=>prev.filter(x=>x.id!==s.id));
       setConfirmDel(null);
       showToast(`${s.name} removed`, "info");
@@ -8536,7 +9874,14 @@ function StudentsPage({ students, setStudents, showToast }) {
     setProcessing(true);
     try {
       const ids = selectedStudents.map(s=>s.id);
-      await Store.bulkDeleteStudents(ids);
+      try {
+        await Store.bulkDeleteStudents(ids);
+      } catch (e) {
+        if (/referenced/.test(e.message || "")) {
+          if (!window.confirm(e.message + "\n\nDelete these students anyway?")) { setProcessing(false); return; }
+          await Store.bulkDeleteStudents(ids, { force: true });
+        } else { throw e; }
+      }
       setStudents(prev=>prev.filter(s=>!selected.has(s.id)));
       setSelected(new Set());
       setConfirmDel(null);
@@ -14667,8 +16012,14 @@ function catSeqLcs(a,b){
 // (confirmAndGenerate): groups[].dept + examGroupYear(group) vs students.
 function catGroupStudents(g, students, exactRegnos){
   const gy=examGroupYear(g);
+  // Department identity is canonical, exactly as the bulk engine already does
+  // (bulkExamStudents). The timetable's JSON key is folded to the canonical code
+  // ("AI & DS" -> "AIDS") when the section is resolved, so a roster that still
+  // spells the department "AI & DS" / "AID S" must fold the same way or the two
+  // AIDS exams match nobody while every other department seats normally.
+  const gd=canonicalDept(g&&g.dept);
   return (students||[]).filter(function(s){
-    return s&&s.dept&&String(s.dept).toUpperCase()===String(g.dept).toUpperCase()
+    return s&&s.dept&&canonicalDept(s.dept)===gd
       && gy===String(s.year)
       && (!exactRegnos||exactRegnos.has(String(s.regno)));
   });
@@ -17125,7 +18476,7 @@ function UniversityPDFImportModal({ open, onClose, exams, setExams, students, se
                             {ex.mode==="create"?<span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">NEW EXAM</span>:ex.existing?<span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">EXISTING FOUND</span>:null}
                             {ex.subjectNew&&<span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700">NEW SUBJECT</span>}
                           </div>
-                          <p className="text-xs text-gray-400 mt-0.5">{category} · {catLabel||category} · {ex.unit.date} · {ex.unit.session==="AN"?"AN (Afternoon)":"FN (Forenoon)"} · {ex.rows.length} students · {ex.rows.filter(function(r){ return r.db; }).length} in master</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{category} · {catLabel||category} · {examDateLong(ex.unit.date)} · {examSessionLong(ex.unit.session)} · {ex.rows.length} students · {ex.rows.filter(function(r){ return r.db; }).length} in master</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={"text-xs font-bold px-3 py-1.5 rounded-xl border-2 "+(preview.summary.invalid+preview.summary.duplicates?"hidden":"")} style={{display:"none"}}/>
@@ -17312,7 +18663,7 @@ function UniversityPDFImportModal({ open, onClose, exams, setExams, students, se
                             {allocResult.pools.map(function(p,i){
                               return (
                                 <div key={i} className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl">
-                                  <span className="text-xs font-black text-gray-700 w-44">{p.session} · {p.date}</span>
+                                  <span className="text-xs font-black text-gray-700 w-44">{examSessionLong(p.session)} · {examDateLong(p.date)}</span>
                                   <span className="text-[11px] text-gray-500 flex-1">{p.students} students · {p.seated} seated · {p.unassigned} unallocated · capacity {p.capacity}</span>
                                   {p.unassigned>0&&<span className="text-[10px] font-black text-red-600 bg-red-100 rounded-full px-2 py-0.5">ADD HALLS</span>}
                                 </div>
@@ -17391,13 +18742,13 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
   const hallPlan = (stage==="halls"||stage==="preview") ? bulkHallSelectionData({
     date: bdate, session: bsession, exams: exams, allExams: exams, students: students, halls: halls,
     plansById: mergedPlans, selectedExamIds: selectedEligible.map(function(r){return r.id;}),
-    selectedHallIds: Array.from(selectedHalls), loadComplete: !seatingPlansLoadWarning,
+    selectedHallIds: Array.from(selectedHalls), loadComplete: !seatingPlansLoadWarning, rules: rules,
   }) : null;
 
   function defaultHallSelection(dateVal, sessionVal, examIds){
     const plan = bulkHallSelectionData({
       date: dateVal, session: sessionVal, exams: exams, allExams: exams, students: students, halls: halls,
-      plansById: seatingPlans||{}, selectedExamIds: examIds, selectedHallIds: [], loadComplete: !seatingPlansLoadWarning,
+      plansById: seatingPlans||{}, selectedExamIds: examIds, selectedHallIds: [], loadComplete: !seatingPlansLoadWarning, rules: rules,
     });
     return new Set(plan.hallRows.filter(function(r){return r.selectable;}).map(function(r){return r.id;}));
   }
@@ -17507,7 +18858,7 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
               return (
                 <button key={v} type="button" disabled={running||!bdate} onClick={function(){pickSession(v);}}
                   className={"flex-1 rounded-xl border-2 px-4 py-3 text-sm font-bold transition-all disabled:opacity-50 "+(bsession===v?"border-indigo-400 bg-indigo-50 text-indigo-700":"border-gray-100 bg-white text-gray-600")}>
-                  {v==="FN"?"FN (Morning)":"AN (Afternoon)"}
+                  {examSessionLong(v)}
                 </button>
               );
             })}
@@ -17550,7 +18901,7 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-sm text-gray-900">{r.subject||"(untitled)"}</span>
-                              <span className={"px-2 py-0.5 rounded-full text-[10px] font-bold "+(r.session==="FN"?"bg-amber-100 text-amber-700":"bg-indigo-100 text-indigo-700")}>{r.session==="FN"?"FN":"AN"}</span>
+                              <span className={"px-2 py-0.5 rounded-full text-[10px] font-bold "+(r.session==="FN"?"bg-amber-100 text-amber-700":"bg-indigo-100 text-indigo-700")}>{examSessionLong(r.session)}</span>
                               {r.hasPlan && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">Seated</span>}
                             </div>
                             <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-gray-400 mt-1">
@@ -17560,6 +18911,7 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
                             </div>
                             {dis && <div className="text-[11px] text-red-500 font-bold mt-1">{r.ineligibleReason}</div>}
                             {(r.capacityWarnings||[]).map(function(w,i){return <div key={i} className="text-[11px] text-amber-600 font-bold mt-1">⚠ {w}</div>;})}
+                            {(r.staleCandidates||[]).length>0 && <div className="text-[11px] text-orange-600 font-bold mt-1">⚠ {(r.staleCandidates||[]).length} candidate register number(s) have no student record and will not be seated: {r.staleCandidates.slice(0,6).join(", ")}{(r.staleCandidates||[]).length>6?" …":""}</div>}
                           </div>
                         </label>
                       );
@@ -17599,7 +18951,7 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
       {stage==="halls" && hallPlan && (
         <div className="space-y-4">
           <div className="rounded-xl border-2 border-indigo-100 bg-indigo-50 p-4">
-            <div className="text-sm font-black text-indigo-800 mb-2">Step 2 · Choose halls — {bdate} · {bsession}</div>
+            <div className="text-sm font-black text-indigo-800 mb-2">Step 2 · Choose halls — {examDateLong(bdate)} · {examSessionLong(bsession)}</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-700">
               <div>Eligible students: <b>{hallPlan.totals.demand}</b></div>
               <div>Selected halls: <b>{hallPlan.totals.selectedHalls}</b></div>
@@ -17659,9 +19011,32 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
             <div className="text-[11px] text-gray-400">Capacity and eligibility are estimates; actual placement also depends on the seating rules.</div>
           </div>
 
+          {hallPlan.columnEstimate && hallPlan.columnEstimate.active && (
+            <div className={"rounded-xl border-2 p-3 text-xs "+(hallPlan.columnEstimate.sufficient?"border-indigo-200 bg-indigo-50":"border-amber-300 bg-amber-50")}>
+              <div className="font-bold text-gray-800">Strict column estimate <span className="font-normal text-gray-500">(department rule needs one department per vertical column)</span></div>
+              <div className="mt-1 text-gray-700">
+                Eligible <b>{hallPlan.columnEstimate.demand}</b> · usable columns in selection <b>{hallPlan.columnEstimate.columnsAvailable}</b> ·
+                estimated complete columns required <b>{hallPlan.columnEstimate.requiredColumns}</b>
+                {!hallPlan.columnEstimate.sufficient && <span> · <b className="text-amber-800">estimated gap {hallPlan.columnEstimate.gapColumns} column(s)</b></span>}
+              </div>
+              {hallPlan.columnEstimate.perDepartment.length>0 && (
+                <div className="mt-1 text-gray-500">{hallPlan.columnEstimate.perDepartment.map(function(p){return <span key={p.dept} className="mr-2">{p.dept}: ~{p.requiredColumns} col</span>;})}</div>
+              )}
+              {!hallPlan.columnEstimate.sufficient && (
+                <div className="mt-1 font-semibold text-amber-800">{hallPlan.columnEstimate.gapMessage ? "To satisfy the department rule, " + hallPlan.columnEstimate.gapMessage + "." : "Add more columns of this hall type."}</div>
+              )}
+              <div className="mt-1 text-gray-400">{hallPlan.columnEstimate.caveat}</div>
+            </div>
+          )}
+
           {hallPlan.validation.errors.length>0 && (
             <div className="rounded-xl border-2 border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
               {hallPlan.validation.errors.map(function(er,i){return <div key={i}>• {er}</div>;})}
+            </div>
+          )}
+          {hallPlan.validation.warnings.length>0 && (
+            <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+              {hallPlan.validation.warnings.map(function(w,i){return <div key={i}>• {w}</div>;})}
             </div>
           )}
 
@@ -17677,12 +19052,15 @@ function BulkSeatingModal({ onClose, exams, students, halls, seatingPlans, seati
           <div className="rounded-xl border-2 border-blue-100 bg-blue-50 p-4">
             <div className="text-sm font-black text-blue-800 mb-2">Batch preview</div>
             <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
-              <div>Date: <b>{bdate} · {bsession}</b></div>
+              <div>Date: <b>{examDateLong(bdate)} · {examSessionLong(bsession)}</b></div>
               <div>Exams selected: <b>{selectedEligible.length}</b></div>
               <div>Students (deduped): <b>{hallPlan?hallPlan.totals.demand:totalEligibleStudents}</b></div>
               <div>Halls selected: <b>{hallPlan?hallPlan.totals.selectedHalls:0}</b></div>
               <div>Free seats in selection: <b>{hallPlan?hallPlan.totals.remaining:totalCapacity}</b></div>
               <div>Capacity status: <b className={hallPlan&&hallPlan.totals.capacityStatus==="sufficient"?"text-emerald-700":"text-red-600"}>{hallPlan?(hallPlan.totals.capacityStatus==="sufficient"?"Sufficient":"Insufficient"):"—"}</b></div>
+              {hallPlan && hallPlan.columnEstimate && hallPlan.columnEstimate.active && (
+                <div className={hallPlan.columnEstimate.sufficient?"text-indigo-700":"text-amber-800 font-semibold"}>Strict columns: ~{hallPlan.columnEstimate.requiredColumns} columns needed vs <b>{hallPlan.columnEstimate.columnsAvailable}</b> available{hallPlan.columnEstimate.sufficient ? "" : " — " + (hallPlan.columnEstimate.gapMessage||"add more columns")+"."}</div>
+              )}
             </div>
             {hallPlan && hallPlan.totals.selectedHalls>0 && (
               <div className="text-[11px] text-gray-500 mt-2">
@@ -17786,7 +19164,12 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
   const [showCatJsonImp,setShowCatJsonImp]=useState(false);
   const [showBulk,setShowBulk]=useState(false);
   const [deleting,setDeleting]=useState(false);
+  const [collapsed,setCollapsed]=useState(()=>new Set());
   const [branchMaster,setBranchMaster]=useState([]);
+  const [fixCand,setFixCand]=useState(null);
+  const [fixOld,setFixOld]=useState("");
+  const [fixNew,setFixNew]=useState("");
+  const [fixing,setFixing]=useState(false);
 
   useEffect(function(){ Store.getBranches().then(setBranchMaster).catch(function(){}); },[]);
 
@@ -17801,6 +19184,21 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
 
   function openAdd() { setForm({subject:"",date:"",session:"FN",hallids:[],groups:[{...blankGroup}],status:"scheduled"}); setEditExam(null); setShowAdd(true); }
   function openEdit(e) { setForm({...e,subject:["University","CAT","Lab","Other"].indexOf(e.subject)>=0?e.subject:(e.category||""),subjectTitle:e.subjectTitle||(["University","CAT","Lab","Other"].indexOf(e.subject)>=0?"":e.subject),groups:(e.groups||[{...blankGroup}]).map(g=>({...g,sem:examGroupSem(g)})),hallids:e.hallids||[]}); setEditExam(e); setShowAdd(true); }
+
+  function openFixCandidate(e) { const stale=examStaleRegisterNumbers(e, students); setFixCand(e); setFixOld(stale[0]||""); setFixNew(""); }
+  async function applyFixCandidate() {
+    if (!fixCand) return;
+    const res = examCandidateCorrection(fixCand, fixOld, fixNew, students);
+    if (!res.ok) { showToast(res.error, "error"); return; }
+    setFixing(true);
+    try {
+      await Store.replaceExamCandidate(fixCand.id, fixOld, fixNew);
+      setExams(prev=>prev.map(e=>e.id===fixCand.id?{...e, registerNumbers:res.registerNumbers, studentCount:res.studentCount}:e));
+      showToast("Candidate corrected"+(res.student&&res.student.name?(": "+res.student.name):"")+" ("+studentRegnoClean(fixNew)+"). Regenerate this exam to seat the student.");
+      setFixCand(null);
+    } catch(e) { showToast("Error: "+e.message, "error"); }
+    finally { setFixing(false); }
+  }
 
   function addGroup() { setForm(f=>({...f,groups:[...f.groups,{...blankGroup}]})); }
   function removeGroup(i) { setForm(f=>({...f,groups:f.groups.filter((_,j)=>j!==i)})); }
@@ -17878,6 +19276,34 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
 
   const sessionColor = s => s==="FN"?"bg-amber-100 text-amber-700":"bg-indigo-100 text-indigo-700";
 
+  // ── grouped rendering: date → session sub-headings, compact rows ──
+  const examGroups = examGroupsByDateSession(visibleExams);
+  const dateKey = d => "D" + d;
+  const sessKey = (d, s) => "S" + d + "\u0001" + s;
+  const toggleCollapse = k => setCollapsed(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const collapseAll = () => { const n = new Set(); examGroups.forEach(g => { n.add(dateKey(g.date)); g.sessions.forEach(s => n.add(sessKey(g.date, s.session))); }); setCollapsed(n); };
+  const expandAll = () => setCollapsed(new Set());
+  const allCollapsed = examGroups.length > 0 && examGroups.every(g => collapsed.has(dateKey(g.date)));
+  const groupAllSelected = g => g.exams.length > 0 && g.exams.every(e => selExams.has(e.id));
+  const sessionAllSelected = s => s.exams.length > 0 && s.exams.every(e => selExams.has(e.id));
+  const toggleGroupAll = g => setSelExams(prev => {
+    const n = new Set(prev);
+    const any = g.exams.some(e => !n.has(e.id));
+    g.exams.forEach(e => { if (any) n.add(e.id); else n.delete(e.id); });
+    return n;
+  });
+  const toggleSessionAll = s => setSelExams(prev => {
+    const n = new Set(prev);
+    const any = s.exams.some(e => !n.has(e.id));
+    s.exams.forEach(e => { if (any) n.add(e.id); else n.delete(e.id); });
+    return n;
+  });
+  const Chevron = ({ open, small }) => (
+    <svg className={"flex-shrink-0 transition-transform text-gray-400 "+(small?"w-3.5 h-3.5":"w-4 h-4")+(open?"":" -rotate-90")} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+    </svg>
+  );
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -17913,45 +19339,111 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
         </div>
       )}
 
-      <div className="space-y-4">
-        {visibleExams.map(exam=>{
-          const exactRegnos = (Array.isArray(exam.registerNumbers)&&exam.registerNumbers.length)?new Set(exam.registerNumbers.map(String)):null;
-          const totalEligible = (() => {
-            if (exactRegnos) return students.filter(s=>exactRegnos.has(String(s.regno))).length;
-            return (exam.groups||[]).reduce((a,g)=>a+students.filter(s=>s.dept?.toUpperCase()===g.dept?.toUpperCase()&&examGroupYear(g)===String(s.year)).length,0);
-          })();
-          return <div key={exam.id} className={"bg-white rounded-2xl p-6 shadow-sm border "+(selExams.has(exam.id)?"border-red-300 ring-2 ring-red-100":"border-gray-100")}>
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <input type="checkbox" checked={selExams.has(exam.id)} onChange={()=>toggleExamSel(exam.id)}
-                className="w-5 h-5 accent-red-600 cursor-pointer mt-1"/>
-              <div className="flex-1">
-                <div className="flex items-center gap-3 flex-wrap mb-2">
-<h3 className="text-xl font-black text-gray-900">{exam.subjectTitle||exam.subject}</h3>
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${sessionColor(exam.session)}`}>{exam.session==="FN"?"FN":"AN"}</span>
-                  {exam.seatinggenerated?<span className="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold flex items-center gap-1"><Ic.Chk/>Seated</span>:<span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">Pending</span>}
+      {examGroups.length>0&&(
+        <div className="flex items-center gap-3 flex-wrap mb-4">
+          <Btn size="sm" variant="ghost" onClick={allCollapsed?expandAll:collapseAll}>
+            {allCollapsed?<><Ic.Plus/>Expand all</>:<><Ic.Swap/>Collapse all</>}
+          </Btn>
+          <span className="text-xs text-gray-400">{visibleExams.length} exam{visibleExams.length===1?"":"s"} in {examGroups.length} date set{examGroups.length===1?"":"s"}</span>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {examGroups.map(g=>{
+          const dOpen = !collapsed.has(dateKey(g.date));
+          const dSel = groupAllSelected(g);
+          const gSeated = g.exams.filter(e=>e.seatinggenerated).length;
+          const gPending = g.exams.length - gSeated;
+          const dLabel = g.date ? examDateHeading(g.date) : "Unscheduled (no date)";
+          return (
+            <div key={dateKey(g.date)} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              {/* ── date group heading ── */}
+              <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">
+                <button type="button" onClick={()=>toggleCollapse(dateKey(g.date))}
+                  className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer">
+                  <Chevron open={dOpen}/>
+                  <h2 className="text-sm font-black text-gray-900 truncate">{dLabel}</h2>
+                </button>
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 flex-shrink-0">
+                  <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200">{g.exams.length} exam{g.exams.length===1?"":"s"}</span>
+                  {gSeated>0&&<span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700">✓ {gSeated}</span>}
+                  {gPending>0&&<span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">{gPending} pending</span>}
                 </div>
-                <div className="flex flex-wrap gap-4 text-sm text-gray-400 mb-3">
-                  <span> {exam.date}</span>
-                  <span> ~{totalEligible} eligible</span>
-                  {exam.hallids?.length?<span> {exam.hallids.length} halls</span>:<span> All halls</span>}
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {(exam.groups||[]).map((g,i)=>(
-                    <span key={i} className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${deptColor(g.dept)}`}>
-                      {g.dept} {examGroupLabel(g)}{g.subjectName?` - ${g.subjectName}`:""}
-                    </span>
-                  ))}
-                </div>
+                <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] font-bold text-gray-500 flex-shrink-0">
+                  <input type="checkbox" checked={dSel} onChange={()=>toggleGroupAll(g)} className="w-4 h-4 accent-red-600 cursor-pointer"/>
+                  All
+                </label>
               </div>
-              <div className="flex gap-2 flex-wrap">
-                <Btn variant="ghost" size="sm" onClick={()=>openEdit(exam)}><Ic.Edit/>Edit</Btn>
-                <Btn onClick={async()=>{setGenerating(exam.id);await onGenerate(exam);setGenerating(null);}} disabled={generating===exam.id} size="sm">
-                  {generating===exam.id?<><Ic.Spin/>Generating...</>:<><Ic.Zap/>{exam.seatinggenerated?"Re-Generate":"Generate Seating"}</>}
-                </Btn>
-                <Btn variant="danger" size="sm" onClick={()=>removeExam(exam)} disabled={deleting}>Remove</Btn>
-              </div>
+
+              {dOpen&&g.sessions.map(s=>{
+                const sKey = sessKey(g.date, s.session);
+                const sOpen = !collapsed.has(sKey);
+                const sSel = sessionAllSelected(s);
+                return (
+                  <div key={sKey}>
+                    {/* ── session sub-heading ── */}
+                    <div className="flex items-center gap-3 px-5 py-2 border-b border-gray-50">
+                      <button type="button" onClick={()=>toggleCollapse(sKey)}
+                        className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer">
+                        <Chevron open={sOpen} small/>
+                        <span className={"px-2 py-0.5 rounded-full text-[10px] font-bold "+sessionColor(s.session)}>{examSessionLong(s.session)}</span>
+                      </button>
+                      <span className="text-[11px] font-bold text-gray-400 flex-shrink-0">{s.exams.length} exam{s.exams.length===1?"":"s"}</span>
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] font-bold text-gray-500 flex-shrink-0">
+                        <input type="checkbox" checked={sSel} onChange={()=>toggleSessionAll(s)} className="w-4 h-4 accent-red-600 cursor-pointer"/>
+                        All
+                      </label>
+                    </div>
+                    {sOpen&&(
+                      <div className="divide-y divide-gray-50">
+                        {s.exams.map(exam=>{
+                          const exactRegnos = (Array.isArray(exam.registerNumbers)&&exam.registerNumbers.length)?new Set(exam.registerNumbers.map(String)):null;
+                          const staleRegs = examStaleRegisterNumbers(exam, students);
+                          const totalEligible = (() => {
+                            if (exactRegnos) return students.filter(s=>exactRegnos.has(String(s.regno))).length;
+                            return (exam.groups||[]).reduce((a,g)=>a+students.filter(s=>s.dept?.toUpperCase()===g.dept?.toUpperCase()&&examGroupYear(g)===String(s.year)).length,0);
+                          })();
+                          const rowSelected = selExams.has(exam.id);
+                          return (
+                            <div key={exam.id} className={"flex items-center gap-3 px-5 py-2.5 flex-wrap "+(rowSelected?"bg-red-50/60":"hover:bg-gray-50")}>
+                              <input type="checkbox" checked={rowSelected} onChange={()=>toggleExamSel(exam.id)} className="w-4 h-4 accent-red-600 cursor-pointer flex-shrink-0"/>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-sm text-gray-900">{exam.subjectTitle||exam.subject}</span>
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${sessionColor(exam.session)}`}>{examSessionLong(exam.session)}</span>
+                                  {exam.seatinggenerated
+                                    ?<span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold flex items-center gap-1"><Ic.Chk/>Seated</span>
+                                    :<span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold">Pending</span>}
+                                </div>
+                                <div className="flex items-center gap-x-3 gap-y-0.5 flex-wrap text-[11px] text-gray-400 mt-0.5">
+                                  {(exam.groups||[]).map((gr,i)=>(
+                                    <span key={i} className={`px-1.5 py-0.5 rounded font-bold text-[10px] border ${deptColor(gr.dept)}`}>
+                                      {gr.dept} {examGroupLabel(gr)}{gr.subjectName?` - ${gr.subjectName}`:""}
+                                    </span>
+                                  ))}
+                                  <span>{examDateLong(exam.date)}</span>
+                                  <span>~{totalEligible} eligible</span>
+                                  {exam.hallids?.length?<span>{exam.hallids.length} hall{exam.hallids.length===1?"":"s"}</span>:<span>All halls</span>}
+                                  {staleRegs.length>0&&<span className="flex items-center gap-1.5 font-bold text-orange-600">⚠ {staleRegs.length} candidate regno{staleRegs.length===1?"":"s"} with no student<button onClick={()=>openFixCandidate(exam)} className="px-2 py-0.5 rounded bg-orange-100 border border-orange-300 text-orange-700 hover:bg-orange-200 text-[10px] font-bold">Fix</button></span>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <Btn variant="ghost" size="sm" onClick={()=>openEdit(exam)}><Ic.Edit/>Edit</Btn>
+                                <Btn onClick={async()=>{setGenerating(exam.id);await onGenerate(exam);setGenerating(null);}} disabled={generating===exam.id||deleting} size="sm">
+                                  {generating===exam.id?<><Ic.Spin/>Generating...</>:<><Ic.Zap/>{exam.seatinggenerated?"Re-Generate":"Generate Seating"}</>}
+                                </Btn>
+                                <Btn variant="danger" size="sm" onClick={()=>removeExam(exam)} disabled={deleting}>Remove</Btn>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </div>;
+          );
         })}
         {!visibleExams.length&&<div className="text-center py-16 text-gray-400"><div className="flex justify-center mb-4 opacity-30 scale-150"><Ic.Cal/></div><p className="font-medium mt-2">{examFilter==="upcoming"?"No upcoming exams.":"No ended exams."}</p></div>}
       </div>
@@ -17976,7 +19468,7 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
         <div className="mb-4">
           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Session</label>
             <div className="flex gap-2">
-              {[["FN","FN (Forenoon)"],["AN","AN (Afternoon)"]].map(([v,l])=>(
+              {[["FN","FN (Morning)"],["AN","AN (Afternoon)"]].map(([v,l])=>(
                 <label key={v} className={`flex-1 flex items-center justify-center gap-1 py-3 rounded-xl border-2 cursor-pointer font-bold text-xs transition-all ${form.session===v?"border-blue-500 bg-blue-50 text-blue-700":"border-gray-200 text-gray-500"}`}>
                   <input type="radio" name="session" value={v} checked={form.session===v} onChange={()=>setForm(f=>({...f,session:v}))} className="sr-only"/>{l}
                 </label>
@@ -18075,6 +19567,29 @@ function ExamsPage({ exams, setExams, halls, students, setStudents, subjects, se
       <CATPDFImportModal open={showCatJsonImp} onClose={()=>setShowCatJsonImp(false)} kind="json"
         exams={exams} setExams={setExams} students={students} subjects={subjects}
         halls={halls} college={college} branches={branchMaster} showToast={showToast}/>
+
+      {fixCand&&(()=>{
+        const stale=examStaleRegisterNumbers(fixCand, students);
+        const res=fixNew?examCandidateCorrection(fixCand, fixOld, fixNew, students):null;
+        return (
+        <Modal title="Fix candidate register number" onClose={()=>setFixCand(null)}>
+          <p className="text-xs text-gray-500 mb-4">Correction for <b>{fixCand.subjectTitle||fixCand.subject}</b>. A candidate register number in this exam has no matching student record, so it is silently dropped at seating time. Replace it with the correct register number of the real student. Only this exam's candidate list is changed.</p>
+          <div className="mb-4">
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Stale candidate (no student)</label>
+            <select value={fixOld} onChange={e=>setFixOld(e.target.value)} className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 text-sm text-gray-800 font-medium bg-white focus:outline-none focus:border-blue-400">
+              {stale.map(r=><option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <Input label="Correct register number" value={fixNew} onChange={setFixNew} placeholder="12-digit register number" maxLength={12} inputMode="numeric"/>
+          {fixNew&&res&&res.ok&&<div className="mb-3 text-xs font-bold text-green-600">→ {res.student&&res.student.name}{res.student&&res.student.dept?(" ("+res.student.dept+")"):""}</div>}
+          {fixNew&&res&&!res.ok&&<div className="mb-3 text-xs font-bold text-red-500">{res.error}</div>}
+          <div className="flex gap-3">
+            <Btn variant="ghost" onClick={()=>setFixCand(null)} className="flex-1">Cancel</Btn>
+            <Btn onClick={applyFixCandidate} disabled={fixing||!(fixNew&&res&&res.ok)} className="flex-1">{fixing?"Applying...":"Apply correction"}</Btn>
+          </div>
+        </Modal>
+        );
+      })()}
     </div>
   );
 }
@@ -18305,7 +19820,7 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
       <div className="mb-6"><h1 className="text-3xl font-black text-gray-900">Seating Plans</h1>
         {lastSeatingGenFailure && lastSeatingGenFailure.exam && seatingPlans[lastSeatingGenFailure.exam.id] && (
           <div className="mt-2 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            ⚠ {lastSeatingGenFailure.exam.subjectTitle || lastSeatingGenFailure.exam.subject} — {lastSeatingGenFailure.exam.date} {lastSeatingGenFailure.exam.session}: the latest seating generation did NOT complete. The PREVIOUS saved plan is shown below and has NOT been replaced.
+            ⚠ {lastSeatingGenFailure.exam.subjectTitle || lastSeatingGenFailure.exam.subject} — {examDateLong(lastSeatingGenFailure.exam.date)} {examSessionLong(lastSeatingGenFailure.exam.session)}: the latest seating generation did NOT complete. The PREVIOUS saved plan is shown below and has NOT been replaced.
           </div>
         )}
       </div>
@@ -18326,8 +19841,8 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
           const [gDate,gSession] = gk.split("|");
           return <div key={gk}>
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${gSession==="FN"?"bg-amber-100 text-amber-700":"bg-indigo-100 text-indigo-700"}`}>{gSession}</span>
-              <span className="text-sm font-bold text-gray-700">{gDate}</span>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${gSession==="FN"?"bg-amber-100 text-amber-700":"bg-indigo-100 text-indigo-700"}`}>{examSessionLong(gSession)}</span>
+              <span className="text-sm font-bold text-gray-700">{examDateLong(gDate)}</span>
               <span className="text-xs text-gray-400">{gv.length} hall{gv.length>1?"s":""} · {gTotal} students</span>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -18352,8 +19867,8 @@ function SeatingPage({ exams, seatingPlans, students, subjects, halls }) {
             <Btn onClick={doSearch}><Ic.Search/></Btn>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${selView.session==="FN"?"bg-amber-100 text-amber-700":"bg-indigo-100 text-indigo-700"}`}>{selView.session}</span>
-            <span className="text-xs text-gray-400">{selView.date}</span>
+            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${selView.session==="FN"?"bg-amber-100 text-amber-700":"bg-indigo-100 text-indigo-700"}`}>{examSessionLong(selView.session)}</span>
+            <span className="text-xs text-gray-400">{examDateLong(selView.date)}</span>
             <span className="text-sm font-bold text-gray-700">{viewCount} students</span>
           </div>
         </div>
@@ -18789,7 +20304,7 @@ function StudentDetailsPage({ students, exams, seatingPlans, halls }) {
                 return seats.map((s,i)=>(
                   <div key={i} className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-2">
                     <div className="font-bold text-emerald-700 text-sm">{s.subject}</div>
-                    <div className="text-xs text-gray-500 mt-1">{s.date} · {s.session} · {s.hallName}</div>
+                    <div className="text-xs text-gray-500 mt-1">{examDateLong(s.date)} · {examSessionLong(s.session)} · {s.hallName}</div>
                     <div className="font-mono text-xs text-emerald-600 font-bold mt-0.5">Seat: {s.seatNo}</div>
                   </div>
                 ));
@@ -18909,12 +20424,43 @@ function UploadPage({ students, setStudents, showToast }) {
       const toAdd    = deduped.filter(s => !existingMap[s.regno]);
       const toUpdate = deduped.filter(s =>  existingMap[s.regno]);
 
+      // ── CONSISTENCY PRE-CHECK (all-or-nothing) ─────────────────
+      // A department/year change can detach a student from an exam whose candidate
+      // list still names them. Validate EVERY change against the college's exams
+      // BEFORE writing anything, so a partial import can never leave a half-
+      // migrated roster (and a silently shrunken exam) behind.
+      if (mode === "update" && toUpdate.length > 0) {
+        let collegeExams = [];
+        try {
+          collegeExams = await dbGet("exams", (Store.getCollegeId && Store.getCollegeId() !== "default") ? [["college_id", "==", Store.getCollegeId()]] : []);
+        } catch (err) { console.warn("[CSVUpload] could not read exams for the detach pre-check:", err && err.message); collegeExams = []; }
+        const detach = [];
+        toUpdate.forEach(function (s) {
+          const cur = existingMap[s.regno];
+          const merged = Object.assign({}, cur, { name: s.name, dept: s.dept, year: s.year, semester: s.semester, section: s.section || "", gender: s.gender });
+          const impact = studentExamDetachImpact(merged, collegeExams);
+          if (impact.length) detach.push(s.regno + " (" + impact.map(function (x) { return x.subject; }).join(", ") + ")");
+        });
+        if (detach.length) {
+          showToast("Upload stopped — " + detach.length + " change(s) would detach a student from an exam candidate list: " + detach.slice(0, 5).join("; ") + (detach.length > 5 ? "; …" : "") + ". Update those exam group(s) first. No students were changed.", "error");
+          setUploading(false);
+          setProgress(null);
+          return;
+        }
+      }
+
       let added = 0, updated = 0, skipped = 0;
 
       // ── ADD new students in chunks ─────────────────────────────
       if (toAdd.length > 0) {
         setProgress({ done: 0, total: toAdd.length, phase: "Adding new students…" });
-        await Store.bulkAddStudents(toAdd);
+        await Store.bulkAddStudents(toAdd, (p) => {
+          setProgress({
+            done: p.done,
+            total: toAdd.length,
+            phase: p.phase === "Writing" ? "Adding new students — writing…" : "Adding new students…",
+          });
+        });
         added = toAdd.length;
         setProgress({ done: added, total: toAdd.length, phase: "Adding new students…" });
         setStudents(prev => [...prev, ...toAdd]);
@@ -18926,7 +20472,9 @@ function UploadPage({ students, setStudents, showToast }) {
         for (let i = 0; i < toUpdate.length; i++) {
           const s   = toUpdate[i];
           const upd = { name: s.name, dept: s.dept, year: s.year, semester: s.semester, section: s.section || "", gender: s.gender };
-          await Store.updateStudent(existingMap[s.regno].id, upd);
+          // The whole batch was pre-validated above, so skip the per-row detach
+          // read here — the rule is still enforced, once, atomically.
+          await Store.updateStudent(existingMap[s.regno].id, upd, { skipDetachCheck: true });
           setStudents(prev => prev.map(x => x.regno === s.regno ? { ...x, ...upd } : x));
           updated++;
           setProgress({ done: i + 1, total: toUpdate.length, phase: "Updating existing…" });
@@ -19235,7 +20783,6 @@ function StudentDashboard({ user, onLogout, exams, seatingPlans }) {
 
 function StudentExamCard({ exam, seatInfo, plan, student }) {
   const hallPlan = plan&&seatInfo ? Object.values(plan).find(hp=>(hp.seats||[]).some(s=>s.regno===student.regno)) : null;
-  const sessionLabel = exam.session==="FN"?"Forenoon (FN)":"Afternoon (AN)";
 
     return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -19244,8 +20791,8 @@ function StudentExamCard({ exam, seatInfo, plan, student }) {
           <div>
             <h3 className="text-xl font-black text-gray-900">{exam.subject}</h3>
             <div className="flex gap-3 text-sm text-gray-400 mt-1.5 flex-wrap">
-              <span> {exam.date}</span>
-              <span>{sessionLabel}</span>
+              <span>Exam date: <b className="text-gray-600">{examDateLong(exam.date)}</b></span>
+              <span>Session: <b className="text-gray-600">{examSessionLong(exam.session)}</b></span>
             </div>
           </div>
           {exam.seatinggenerated?<span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">Seat Assigned</span>:<span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">Pending</span>}
@@ -19426,8 +20973,8 @@ function ConflictCheckerPage({ exams, seatingPlans, students }) {
                     <div className="font-black text-red-700 text-sm">{c.name} <span className="font-mono text-xs bg-red-100 px-2 py-0.5 rounded">{c.regno}</span></div>
                     <div className="text-red-600 text-xs mt-1">{c.msg}</div>
                     <div className="flex gap-2 mt-2 flex-wrap">
-                      <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-bold">{c.date}</span>
-                      <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-bold">{c.session}</span>
+                      <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-bold">{examDateLong(c.date)}</span>
+                      <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-bold">{examSessionLong(c.session)}</span>
                       <span className="bg-white border border-red-200 text-red-600 px-2 py-0.5 rounded text-xs">{c.exam1}</span>
                       <span className="text-red-400 text-xs self-center">&#8596;</span>
                       <span className="bg-white border border-red-200 text-red-600 px-2 py-0.5 rounded text-xs">{c.exam2}</span>
@@ -19487,7 +21034,7 @@ function AttendanceSheetPage({ exams, seatingPlans, students, college }) {
                 <div key={exam.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center justify-between gap-4">
                   <div>
                     <div className="font-black text-gray-900">{exam.subject}</div>
-                    <div className="text-sm text-gray-400 mt-0.5">{exam.date}   {exam.session}   {total} students   {Object.keys(plan).length} hall(s)</div>
+                    <div className="text-sm text-gray-400 mt-0.5">{examDateLong(exam.date)}   {examSessionLong(exam.session)}   {total} students   {Object.keys(plan).length} hall(s)</div>
                   </div>
                   <button onClick={()=>generateAttendancePDF(exam)}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-bold text-sm"
@@ -19735,8 +21282,20 @@ function BackupRestorePage({ students, setStudents, halls, setHalls, exams, setE
       // the current data is never wiped for a bad backup.
       if (s?.length) {
         const stamped=[];
+        // College validation is done PER CENTRE CODE, not per student:
+        // resolveCollegeFromRegisterNumber reads the whole colleges node on every
+        // call, so a multi-thousand-student restore was making one full network
+        // read per student. Successes are memoised by their 4-digit centre code —
+        // malformed register numbers (which fail for reasons other than the code)
+        // are never cached, so their per-student error text is unchanged.
+        const collegeByCode={};
         for (const x of s) {
-          const rr=await resolveCollegeFromRegisterNumber(x.regno);
+          const code = studentRegnoClean(x.regno).slice(0,4);
+          let rr = collegeByCode[code];
+          if (!rr || !rr.collegeId) {
+            rr = await resolveCollegeFromRegisterNumber(x.regno);
+            if (rr && rr.collegeId) collegeByCode[code]=rr;
+          }
           if(!rr.college) throw new Error("Restore blocked — register number "+(x.regno||"")+" does not match any registered college ("+rr.error+"). Fix the backup and retry.");
           if(rr.collegeId!==Store.getCollegeId()) throw new Error("Restore blocked — the backup contains students from another college ("+rr.collegeName+" / "+rr.centreCode+"). A student's college is always taken from the register number.");
           stamped.push({...x, college_id: rr.collegeId});
@@ -19760,13 +21319,24 @@ function BackupRestorePage({ students, setStudents, halls, setHalls, exams, setE
         await dbBatchAdd("exams", e.map(x => ({...x, college_id: Store.getCollegeId()})));
         setExams(e);
       }
-      // Restore seating plans
+      // Restore seating plans — ownership is enforced per exam. A plan document
+      // has no college_id, so ownership comes from its exam; EVERY backup plan's
+      // exam is checked BEFORE anything is removed, so a foreign exam in the file
+      // can never cause a foreign plan to be deleted or overwritten. The delete is
+      // now scoped to THIS college's exams instead of wiping the whole
+      // /seating_plans node (which previously removed every other college's
+      // plans). Each write goes through Store.setSeatingPlan, which re-checks
+      // ownership. Nothing is migrated or rewritten. The whole sequence lives in
+      // restoreSeatingPlans (above) so its all-or-nothing ordering is unit-tested.
       if (sp && Object.keys(sp).length) {
-        const existingPlans = await dbGet("seating_plans", []);
-        if (existingPlans.length) await dbBatchDelete("seating_plans", existingPlans.map(x => x.id));
-        for (const [exam_id, plan] of Object.entries(sp)) {
-          await dbAdd("seating_plans", { id: uid(), exam_id, plan });
-        }
+        await restoreSeatingPlans({
+          backupPlans: sp,
+          currentExamIds: exams.map(x => x.id),
+          assertOwnership: (id) => assertSeatingPlanOwnership(id),
+          getAllPlans: () => dbGet("seating_plans", []),
+          deletePlans: (ids) => dbBatchDelete("seating_plans", ids),
+          writePlan: (id, plan) => Store.setSeatingPlan(id, plan),
+        });
         setSeatingPlans(sp);
       }
 
@@ -21204,7 +22774,7 @@ const _diagHall = (id, name, nRows, cols) => {
     return typeof c === "number" ? { seats: c } : c;
   });
   const columns = srcCols.map(function(c){
-    return { seats: Math.max(1, Math.min(4, parseInt((c && c.seats) || 1, 10))) };
+    return { seats: Math.max(1, Math.min(6, parseInt((c && c.seats) || 1, 10))) };
   });
   const perRow = columns.reduce(function(a, c){ return a + c.seats; }, 0);
   return {
@@ -23719,7 +25289,7 @@ function HallNoticePage({ halls, seatingPlans, exams, students, college, showToa
   // date+session (and hall in "one" mode), so all three can never describe
   // different allocations.
   const docOpts = function() {
-    return { exams: exams, seatingPlans: seatingPlans, halls: halls || [],
+    return { exams: exams, seatingPlans: seatingPlans, halls: halls || [], students: students || [],
       date: selDate || null, session: selSession || null,
       hallId: mode==="one" && selOption ? selOption.id : null };
   };
@@ -24322,7 +25892,7 @@ function AttendancePDFImportPage({ students, setStudents, exams, setExams, halls
                             <span className={"px-2 py-0.5 rounded-full text-xs font-bold border "+deptColor(group.dept)}>{group.dept}</span>
                           </div>
                           <div className="flex flex-wrap gap-3 text-xs text-gray-500 mb-2">
-                            <span className="flex items-center gap-1"><IcCal2/><b>{group.date}</b> {group.session}</span>
+                            <span className="flex items-center gap-1"><IcCal2/><b>{examDateLong(group.date)}</b> {examSessionLong(group.session)}</span>
                             {group.branchName && <span className="flex items-center gap-1"><IcBranch2/>{group.branchName}</span>}
                             <span className="flex items-center gap-1"><IcUsers2/><b className="text-gray-800">{group.students.length}</b> students</span>
                           </div>

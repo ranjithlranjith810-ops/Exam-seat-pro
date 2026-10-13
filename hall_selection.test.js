@@ -293,4 +293,186 @@ it("H21 runBulkSeatingCoSeated honours cfg.selectedHallIds", () => {
   ok(body.indexOf("canonicalHallId") >= 0, "selection ids are canonicalised");
 });
 
+// ── CAT exams use CAT halls; the STORED hallType is what the picker trusts ────
+// A CAT exam (category "CAT", subject not itself a hall type) is classified by
+// examHallTypePool as a CAT exam, so only CAT-type halls become selectable. The
+// inverse is the point of the reported symptom: a hall physically named "LH-6"
+// but with NO hallType stored reads as "University" and is correctly refused for
+// a CAT exam — the fix is in the hall records, not the filter. "University" as a
+// subject name is deliberately carried through so a University exam stays a
+// University exam even though the string shadows the type name.
+it("H22 a CAT exam makes ONLY CAT halls selectable", () => {
+  const cat = exam("CAT1", "2025-12-01", "FN", [{ dept: "CSE", year: 1 }],
+    { subject: "Data Structures", category: "CAT", examCategory: "Continuous Assessment Test-II 2026-27" });
+  eq(api.examHallTypePool(cat).join(","), "CAT", "classified by bucket when the subject is not a type name");
+  const plan = api.bulkHallSelectionData({
+    date: "2025-12-01", session: "FN", allExams: [cat], students: students(4, "CSE", 1),
+    halls: [hall("lh6", "CAT", 20), hall("lh7", "University", 20), hall("lab", "Lab", 5)],
+    plansById: {}, selectedExamIds: ["CAT1"], selectedHallIds: ["lh6"], loadComplete: true,
+  });
+  const catRow = plan.hallRows.filter(function (r) { return r.id === "lh6"; })[0];
+  const uniRow = plan.hallRows.filter(function (r) { return r.id === "lh7"; })[0];
+  const labRow = plan.hallRows.filter(function (r) { return r.id === "lab"; })[0];
+  eq(catRow.selectable, true, "the CAT hall is offered");
+  eq(uniRow.selectable, false);
+  ok(/uses University halls/.test(uniRow.reason), uniRow.reason);
+  eq(labRow.selectable, false);
+  ok(/uses Lab halls/.test(labRow.reason), labRow.reason);
+});
+
+function catExam() {
+  return exam("CAT1", "2025-12-01", "FN", [{ dept: "CSE", year: 1 }],
+    { subject: "Data Structures", category: "CAT", examCategory: "Continuous Assessment Test-II 2026-27" });
+}
+
+// ── LH-6..LH-11 individually, with EXPLICITLY stored hall types ──────────────
+// Item: "Check LH-6, LH-7, LH-8, LH-9, LH-10 and LH-11 individually using
+// synthetic fixtures with explicitly assigned hall types." Type is never
+// inferred from the name — the picker only trusts the stored hallType, so the
+// same name with a different stored type flips eligibility.
+it("H24 a CAT exam's per-hall eligibility = each hall's STORED type (LH-6..LH-11)", () => {
+  const cat = catExam();
+  const halls = [
+    hall("lh-6",  "CAT",            20, 3),   // 60 seats
+    hall("lh-7",  "CAT",            30, 3),   // 90 seats
+    hall("lh-8",  "CAT",            40, 3),   // 120 seats
+    hall("lh-9",  "University",     20, 3),
+    hall("lh-10", "University",     30, 3),
+    hall("lh-11", "Lab",            20, 3),
+  ];
+  const plan = api.bulkHallSelectionData({
+    date: "2025-12-01", session: "FN", allExams: [cat], students: students(30, "CSE", 1),
+    halls: halls, plansById: {}, selectedExamIds: ["CAT1"], loadComplete: true,
+    // Forcing ineligible ids (lh-9, lh-11) must NOT inflate the count.
+    selectedHallIds: ["lh-6", "lh-7", "lh-8", "lh-9", "lh-11"],
+  });
+  const row = function (id) { return plan.hallRows.filter(function (r) { return r.id === id; })[0]; };
+  ["lh-6", "lh-7", "lh-8"].forEach(function (id) {
+    eq(row(id).type, "CAT", id + " stored type is exposed");
+    eq(row(id).selectable, true, id + " (stored CAT) is selectable for the CAT exam");
+  });
+  ["lh-9", "lh-10"].forEach(function (id) {
+    eq(row(id).type, "University", id + " stored type is exposed");
+    eq(row(id).selectable, false, id + " (stored University) is refused");
+    ok(/uses University halls/.test(row(id).reason),
+      id + " is rejected for its STORED type, not a capacity/occupancy constraint (" + row(id).reason + ")");
+  });
+  eq(row("lh-11").type, "Lab", "lh-11 stored type is exposed");
+  eq(row("lh-11").selectable, false, "lh-11 (stored Lab) is refused for a CAT exam");
+  ok(/uses Lab halls/.test(row("lh-11").reason),
+    "lh-11 is rejected for its STORED type, not a capacity/occupancy constraint (" + row("lh-11").reason + ")");
+  eq(plan.totals.selectedHalls, 3, "the two forced ineligible ids are not counted");
+  ok(plan.hallRows.filter(function (r) { return r.selected; }).every(function (r) { return r.type === "CAT"; }),
+    "preview 'selected' flags only genuinely eligible CAT halls");
+  eq(plan.totals.remaining, 60 + 90 + 120, "remaining counts only the CAT halls that can actually be chosen");
+  eq(plan.totals.capacityStatus, "sufficient");
+  eq(plan.validation.ok, true);
+});
+
+ait("H25 generator agrees with the picker: for a CAT exam only stored-CAT halls are usable, even if University/Lab ids are passed", async () => {
+  const cat = catExam();
+  const halls = [hall("lh-6", "CAT", 20, 3), hall("lh-9", "University", 20, 3), hall("lh-11", "Lab", 20, 3)];
+  const saved = {};
+  const res = await api.runBulkSeating({
+    exams: [cat], allExams: [cat], students: students(4, "CSE", 1), halls: halls, rules: R(), coSeat: true,
+    selectedHallIds: ["lh-6", "lh-9", "lh-11"],
+    savePlan: async function (id, plan) { saved[id] = plan; },
+  });
+  eq(res.summary.completed, 1, "the CAT exam seats into CAT halls");
+  eq(Object.keys(saved.CAT1), ["lh-6"], "the University and Lab halls are excluded from the CAT pool even when explicitly listed");
+  eq((saved.CAT1["lh-6"].seats || []).length, 4);
+});
+
+ait("H25b generator excludes a stored-University hall from a CAT exam (the reverse of H17)", async () => {
+  const cat = catExam();
+  const halls = [hall("lh-9", "University", 20, 3)];
+  const res = await api.runBulkSeating({
+    exams: [cat], allExams: [cat], students: students(4, "CSE", 1), halls: halls, rules: R(), coSeat: true,
+    selectedHallIds: ["lh-9"], savePlan: async function () {},
+  });
+  eq(res.summary.completed, 0);
+  eq(res.results[0].category, "NO_ELIGIBLE_HALLS");
+  ok(/None of the selected halls can seat this exam's hall type/.test(res.results[0].reason), res.results[0].reason);
+});
+
+it("H26 an ineligible hall id forced into the selection is invisible in the count, preview list and totals", () => {
+  const cat = catExam();
+  const plan = api.bulkHallSelectionData({
+    date: "2025-12-01", session: "FN", allExams: [cat], students: students(4, "CSE", 1),
+    halls: [hall("lh-9", "University", 20, 3)], plansById: {}, selectedExamIds: ["CAT1"],
+    selectedHallIds: ["lh-9"], loadComplete: true,
+  });
+  eq(plan.totals.selectedHalls, 0, "total does not count the ineligible hall");
+  eq(plan.hallRows[0].selected, false, "the hall is not flagged selected for the preview");
+  eq(plan.validation.ok, false);
+  ok(/Select at least one hall/.test(plan.validation.errors.join(" ")), plan.validation.errors.join(" "));
+});
+
+it("H23 a CAT-named hall with NO stored hallType reads as University and is refused for CAT", () => {
+  const cat = exam("CAT1", "2025-12-01", "FN", [{ dept: "CSE", year: 1 }],
+    { subject: "Data Structures", category: "CAT", examCategory: "Continuous Assessment Test-II 2026-27" });
+  const noType = { id: "lh6", name: "LH-6", numbenches: 20, studentsperbench: 3 }; // hallType missing
+  const plan = api.bulkHallSelectionData({
+    date: "2025-12-01", session: "FN", allExams: [cat], students: students(2, "CSE", 1),
+    halls: [noType], plansById: {}, selectedExamIds: ["CAT1"], selectedHallIds: [], loadComplete: true,
+  });
+  eq(plan.hallRows[0].type, "University", "blank hallType defaults to University");
+  eq(plan.hallRows[0].selectable, false, "a CAT exam cannot use a hall typed University");
+  ok(/uses University halls/.test(plan.hallRows[0].reason), plan.hallRows[0].reason);
+});
+
+// ── physical halls stored as multiple records (per-department import aliases) ──
+// One physical hall is sometimes stored as several id-different records with the
+// same name. Every type consumer (the generator pool, bulkSelectHalls, the
+// single-exam auto pick) evaluates EACH record's own hallType — the picker used to
+// model the first-encountered record only, so a CAT record sorted AFTER a
+// University alias rendered the whole physical hall as University, refused it for
+// the CAT exam, and disagreed with the generator that seats the CAT twin. These
+// pin the real failure path end-to-end (picker ⟷ generator).
+const LY_CAT = { columns: [{ seats: 3 }], aisleAfter: [false] };
+function dupLH8(recOrder) {
+  const recA = { id: "lh8a", name: "LH-8", hallType: "University", numbenches: 20, studentsperbench: 3, layoutConfig: LY_CAT };
+  const recB = { id: "lh8b", name: "LH-8", hallType: "CAT",        numbenches: 20, studentsperbench: 3, layoutConfig: LY_CAT };
+  return { recA: recA, recB: recB, halls: (recOrder === "B-first" ? [recB, recA] : [recA, recB]) };
+}
+it("H27 a CAT record hidden behind a University alias (either order) is not misread as University", () => {
+  const cat = catExam();
+  ["A-first", "B-first"].forEach(function (order) {
+    const { halls } = dupLH8(order);
+    const plan = api.bulkHallSelectionData({
+      date: "2025-12-01", session: "FN", allExams: [cat], students: students(4, "CSE", 1),
+      halls: halls, plansById: {}, selectedExamIds: ["CAT1"], selectedHallIds: [], loadComplete: true,
+    });
+    eq(plan.hallRows.length, 1, order + ": the two records collapse to one physical hall");
+    eq(plan.hallRows[0].name, "LH-8");
+    eq(plan.hallRows[0].type, "CAT", order + ": the picker exposes the CAT record, not the University alias");
+    eq(plan.hallRows[0].selectable, true, order + ": the physical hall is selectable for the CAT exam");
+  });
+});
+ait("H28 the generator seats the CAT-record twin of a physical hall the picker now shows as CAT", async () => {
+  const cat = catExam();
+  const { halls } = dupLH8("A-first");
+  const saved = {};
+  const res = await api.runBulkSeating({
+    exams: [cat], allExams: [cat], students: students(4, "CSE", 1), halls: halls, rules: R(), coSeat: true,
+    selectedHallIds: ["lh8a"],   // the canonical id the picker row displays
+    savePlan: async function (id, plan) { saved[id] = plan; },
+  });
+  eq(res.summary.completed, 1);
+  ok(saved.CAT1, "a plan was written under the exam id");
+  const seats = Object.keys(saved.CAT1).reduce(function (n, hid) { return n + ((saved.CAT1[hid].seats || []).length); }, 0);
+  eq(seats, 4, "all four students seat into the physical hall via its CAT record");
+});
+it("H29 a genuinely single-record University hall stays refused for a CAT exam (type restriction NOT bypassed)", () => {
+  const cat = catExam();
+  const plan = api.bulkHallSelectionData({
+    date: "2025-12-01", session: "FN", allExams: [cat], students: students(4, "CSE", 1),
+    halls: [{ id: "lh7", name: "LH-7", hallType: "University", numbenches: 20, studentsperbench: 3, layoutConfig: LY_CAT }],
+    plansById: {}, selectedExamIds: ["CAT1"], selectedHallIds: ["lh7"], loadComplete: true,
+  });
+  eq(plan.hallRows[0].type, "University");
+  eq(plan.hallRows[0].selectable, false, "a real University hall is still excluded");
+  ok(/uses University halls/.test(plan.hallRows[0].reason), plan.hallRows[0].reason);
+});
+
 module.exports = s;

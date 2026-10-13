@@ -149,20 +149,21 @@ it("T2: 50 students on two 45-seat halls spill 45 → 5 (first-hall-first, zero 
 
 // ── T3. NO_LEGAL_SEAT vs HALL_CAPACITY_EXHAUSTED are told apart truthfully ──────
 it("T3: a rule-blocked remainder is NO_LEGAL_SEAT, a pure capacity shortage is HALL_CAPACITY_EXHAUSTED", () => {
-  // [2,3] single-row hall (5 seats): four seats fill as CSE, ECE, CSE, ECE, but
-  // B1.3 sits beside the ECE at B1.2 and the only remaining student is a FIFTH
-  // ECE — B1.3 is genuinely stranded by the rule with a free seat left over (the
-  // back-fill repaired the old forward-scan gaps elsewhere, but cannot conjure a
-  // third department), so this remainder is NO_LEGAL_SEAT, not capacity.
+  // [2,3] single-row hall (5 seats): 5 MECH + 1 CSE. Largest-first fills A1.1
+  // (MECH), back-fills A1.2 (CSE), then MECH takes B1.1 and B1.3 — but B1.2 sits
+  // beside B1.1 and is a MECH-seat-left-over that MECH can never legally take
+  // (and the CSE is exhausted), so two MECH stay stranded with a free seat:
+  // genuinely NO_LEGAL_SEAT, not capacity.
   const small = hall("h8", "H8", "University", 1, [2, 3]);
-  const blockedRoster = students(2, "CSE", 1).concat(students(3, "ECE", 1));
+  const blockedRoster = students(5, "MECH", 1).concat(students(1, "CSE", 1));
   const examR = examOf("t3r", "T3 Rule", blockedRoster, ["h8"],
-    [{ dept: "CSE", year: 1 }, { dept: "ECE", year: 1 }]);
+    [{ dept: "MECH", year: 1 }, { dept: "CSE", year: 1 }]);
   const lookupsR = api.bulkBuildLookups(blockedRoster, [examR], [small]);
   const rules = { splitGender: false, noSameDept: true, noSameYear: false, benchAdjacency: false };
   const resRules = api.bulkGenerateOne(examR, blockedRoster, [small], rules, [examR], {}, lookupsR);
   ok(!resRules.ok && resRules.category === "NO_LEGAL_SEAT",
     "rule-rejected remainder must be NO_LEGAL_SEAT — got " + resRules.category + ": " + resRules.reason);
+  eq((resRules.unplaced || []).length, 2, "the two stranded MECH students are honestly reported");
   // The same 5-seat hall, rules off, with more students than it holds: a pure
   // capacity shortage, so the same reason-dependent path reports capacity.
   const capRoster = students(8, "MECH", 1);

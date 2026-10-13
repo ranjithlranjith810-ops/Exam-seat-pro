@@ -158,21 +158,23 @@ it("R3: a seat reserved by a coexisting plan stays empty; the reservation is cou
 
 // ── R4. a seat the rules genuinely block stays empty — with a truthful reason ─
 it("R4: a facing-seat island the rules genuinely block is not force-filled (4 of 6 placed, honest rule reason)", () => {
-  // [3,3] single-row hall. With D1x5 + D2x1 the leftmost column accepts D1 D2 D1;
-  // the second column's leading facing seat only fits a non-D1 and its inner slots
-  // only fit non-D2 — the pool is out of the missing partner, so 2 seats are
-  // un-fillable while 2 D1 students remain. They must be reported, never invented.
+  // [3,3] single-row hall, 5 MECH + 1 CSE. COLUMN-WISE MODE + largest-first:
+  // the left column is the MECH demand — A1.1 MECH, A1.2 back-fills a CSE (a
+  // MECH can never sit beside A1.1), A1.3 MECH. On the right column B1.1 FACES
+  // the MECH at A1.3 so a MECH can never start there, and B1.3 sits beside the
+  // MECH at B1.2: exactly B1.2 fills. 4 seats fill; the 2 MECH students that
+  // cannot complete any pure column are reported, never invented into a seat.
   const h6 = hall("h1", "LH-1", "CAT", 1, [3, 3], 6);
   const pool = students(5, "MECH", 2).concat(students(1, "CSE", 2));
   api.generateSmartSeating([{ label: "E1", students: pool, rules: RULES }], [h6], {});
   const A = last();
-  eq(hallSeats(A.plan, "h1").length, 4, "exactly the 4 legally fillable seats are filled — got " + hallSeats(A.plan, "h1").length);
-  eq(A.unplaced.length, 2, "the 2 truly blockable students are reported unplaced");
+  eq(hallSeats(A.plan, "h1").length, 4, "the 4 legally fillable pure-column seats are filled (A1.1/A1.2/A1.3/B1.2) — got " + hallSeats(A.plan, "h1").length);
+  eq(A.unplaced.length, 2, "the 2 genuinely blockable MECH students are reported unplaced");
   ok(A.unplaced[0].reason.indexOf("No legal seat satisfies the active rules") >= 0,
     "a rule rejection reports the RULE, never capacity (got: " + A.unplaced[0].reason + ")");
   eq(api.validatePlan(A.plan, RULES), [], "no rule is bent to seat them");
   const e1 = emptyFor(A, "h1");
-  eq(e1.empty, 2, "2 seats stay empty");
+  eq(e1.empty, 2, "2 seats stay empty (B1.1 and B1.3 — facing/beside an un-fillable start)");
   eq(e1.occupied, 4, "4 occupied");
   ok(e1.reason.indexOf("Eligible students remain but no legal seat is available in the eligible halls") >= 0,
     "students remain -> the empty seats are explained as genuinely un-fillable (got: " + e1.reason + ")");
@@ -197,25 +199,30 @@ it("R5: splitGender aggregates male- and female-block empty accounting; halls ne
     "each gender pool was exhausted -> pool reason");
 });
 
-// ── R6. the real 14-10-2026 FN co-seated mix fills LH-1 to 45, TOTAL=45 ───────
-it("R6: real 14-10-2026 FN mix (7/24/7/7) co-seated on one slot fills LH-1 to its usable 45 and still shows TOTAL 45", () => {
+// ── R6. the real 14-10-2026 FN co-seated mix seats every pure column ──────────
+it("R6: real 14-10-2026 FN mix (7/24/7/7) co-seated on one slot seats 41 in LH-1's pure columns (4 straddle, 0 unplaced), TOTAL 41", () => {
   const pool = students(7, "CSE", 1, "male", 0)
     .concat(students(24, "MECH", 1, "male", 10), students(7, "IT", 1, "male", 40), students(7, "ECE", 1, "male", 60));
   api.generateSmartSeating([{ label: "E1", students: pool, rules: RULES }], [lh1(), lh2()], {});
   const A = last();
+  // 45 students (7 CSE + 24 MECH + 7 IT + 7 ECE) do not tile into the 5-row pure
+  // columns of a single 45-seat hall: largest-remaining-demand-first gives the
+  // combined 45 rows to MECH (5 columns), CSE (2), IT (2) and ECE (1 more), so
+  // only the first 3 ECE fit and the rest straddle into LH-2. All 45 are seated;
+  // no column ever mixes.
   eq(A.unplaced.length, 0, "0 unplaced");
-  eq(hallSeats(A.plan, "lh1").length, 45, "LH-1 fills to its full usable 45 — got " + hallSeats(A.plan, "lh1").length);
-  eq(hallSeats(A.plan, "lh2").length, 0, "no spill into LH-2");
+  eq(hallSeats(A.plan, "lh1").length, 41, "LH-1 seats exactly its pure columns — got " + hallSeats(A.plan, "lh1").length);
+  eq(hallSeats(A.plan, "lh2").length, 4, "the 4 students that cannot complete an LH-1 column straddle into LH-2");
   eq(adjPairs(A.plan), 0, "co-seated merged plan has zero adjacency violations");
-  eq(emptyFor(A, "lh1").empty, 0, "LH-1 has no free seat to explain");
+  eq(emptyFor(A, "lh1").empty, 4, "LH-1's 4 tail-free slots stay empty (strict purity, never re-mixed)");
 
   const exams = [{ id: "e1", subject: "MERGED", date: FN, session: "FN", seatinggenerated: true }];
   const plans = { e1: A.plan };
   const doc = api.buildHallNoticesPrintDocument({ exams: exams, seatingPlans: plans, halls: [lh1(), lh2()], date: FN, session: "FN", hallId: "lh1" }, COLLEGE);
   eq(doc.pages.length, 1, "one date+session+hall = one page");
-  ok(/TOTAL:<\/strong> 45/.test(doc.pages[0]), "Hall Notice TOTAL is 45 — the exact count the merged plan saves");
+  ok(/TOTAL:<\/strong> 41/.test(doc.pages[0]), "Hall Notice TOTAL is 41 — the exact count the merged plan saves");
   const distinct = new Set(hallSeats(A.plan, "lh1").map(function (x) { return x.seatNo; }));
-  eq(distinct.size, 45, "TOTAL == distinct occupied physical seats");
+  eq(distinct.size, 41, "TOTAL == distinct occupied physical seats");
 });
 
 // ── R7. empty-seat accounting is report data, never saved into the plan ───────

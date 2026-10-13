@@ -414,4 +414,61 @@ it("bulk persistence goes through the college-scoped Store helpers", () => {
   ok(/typeof onGenerate!=="function"|onGenerate/.test(html), "sanity");
 });
 
+// ── human-readable date / session labels ─────────────────────────────────────
+it("examDateLong renders ISO dates as '<day> <Month> <year>'", () => {
+  eq(api.examDateLong("2026-10-14"), "14 October 2026");
+  eq(api.examDateLong("2026-01-05"), "5 January 2026");
+  eq(api.examDateLong("2026-12-31"), "31 December 2026");
+});
+it("examDateLong leaves multi-day ranges and junk unchanged (never collapsed)", () => {
+  eq(api.examDateLong("2026-10-06 to 2026-10-16"), "2026-10-06 to 2026-10-16");
+  eq(api.examDateLong(""), "");
+  eq(api.examDateLong(null), "");
+  eq(api.examDateLong("not-a-date"), "not-a-date");
+});
+it("examSessionLong maps FN/AN to the human labels and passes unknowns through", () => {
+  eq(api.examSessionLong("FN"), "FN (Morning)");
+  eq(api.examSessionLong("an"), "AN (Afternoon)");
+  eq(api.examSessionLong("FN (Morning)"), "FN (Morning)", "idempotent");
+  eq(api.examSessionLong(""), "");
+});
+
+// ── every on-screen date/session location routes through the shared formatters ─
+const modalBody = () => {
+  const html = fs.readFileSync(h.HTML, "utf8");
+  const start = html.indexOf("function BulkSeatingModal(");
+  const end = html.indexOf("function ExamsPage(", start);
+  return start >= 0 && end > start ? html.slice(start, end) : "";
+};
+
+it("Step 1 session buttons and row badges render via examSessionLong", () => {
+  const body = modalBody();
+  ok(/examSessionLong\(v\)/.test(body), "date picker's FN/AN buttons use the shared session formatter");
+  ok(/examSessionLong\(r\.session\)/.test(body), "each scheduled exam's session badge uses the shared session formatter");
+  ok(!/\{v==="FN"\?"FN \(Morning\)":"AN \(Afternoon\)"\}/.test(body), "Step 1 does not duplicate a literal long label");
+});
+
+it("Step 2 hall-selection header and Step 3 batch preview use examDateLong + examSessionLong", () => {
+  const body = modalBody();
+  eq((body.match(/examDateLong\(bdate\)\} · \{examSessionLong\(bsession\)\}/g) || []).length, 2,
+    "Step 2 header and Step 3 preview both use the shared date + session formatters");
+  const bdateUses = body.match(/\{bdate\}/g) || [];
+  eq(bdateUses.length, 1, "the raw ISO date is used exactly once as the native date input's value (YYYY-MM-DD), never as visible text");
+  ok(/value=\{bdate\}/.test(body), "that one use is the <input type=date> value, per the YYYY-MM-DD requirement");
+});
+
+it("exam cards and student exam cards route dates and sessions through the shared formatters", () => {
+  const html = fs.readFileSync(h.HTML, "utf8");
+  const matches = (html.match(/examSessionLong\(exam\.session\)/g) || []).length;
+  ok(matches >= 2, "the exam card and the student exam card both use the shared session formatter (got " + matches + ")");
+  ok(/examDateLong\(exam\.date\)/.test(html), "exam card date uses the shared date formatter");
+});
+
+it("no user-visible label still says 'FN (Forenoon)' and the CAT import preview uses the shared formatters", () => {
+  const html = fs.readFileSync(h.HTML, "utf8");
+  ok(!/FN \(Forenoon\)/.test(html), "'Forenoon' is gone — session text is consistently 'FN (Morning)'");
+  ok(/examDateLong\(ex\.unit\.date\)/.test(html), "CAT import preview date uses the shared date formatter");
+  ok(/examSessionLong\(ex\.unit\.session\)/.test(html), "CAT import preview session uses the shared session formatter");
+});
+
 module.exports = s;

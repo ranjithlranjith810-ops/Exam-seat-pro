@@ -43,6 +43,7 @@ const SEATING_ENGINE = new Set([
   "adjacencyImpossibility",
   "manualRuleGate",
   "interleaveByDepartment",
+  "deptColumnModeActive",
   "canonicalDept",
 ]);
 
@@ -86,6 +87,34 @@ const NOTICE_ENGINE = new Set([
   "hnFormatDate",
   "colLabelFromIdx",
   "hnDebug",
+  "hnYearRoman",
+  "hnIndexStudents",
+  "hnExamDeptSem",
+  "hnAcademicYearOf",
+  "hnSemesterTag",
+  "hnNoticeTypeToken",
+  "resolveNoticeHeading",
+  "hnLegacyNoticeHeading",
+  "hnNoticeDeptYear",
+  "hnStudentSection",
+  "hnGenderKind",
+  "globalNoticeDates",
+  "gnCanonDate",
+  "gnCanonSession",
+  "gnValidSession",
+  "gnFormatDate",
+  "gnCompactRegnos",
+  "buildGlobalNoticeHalls",
+  "gnHeaderHTML",
+  "gnHallBlockHTML",
+  "gnEstRowHeight",
+  "gnHallBannerHeight",
+  "gnHallBannerHTML",
+  "gnTableHeadHTML",
+  "gnSubjectRowHTML",
+  "gnHallTotalRowHTML",
+  "gnNoticeStylesheet",
+  "buildGlobalNoticeDocument",
 ]);
 
 // The college-data load path. `withDataTimeout` bounds a read that may never
@@ -113,6 +142,12 @@ const LOAD_ENGINE = new Set([
 const BULK_ENGINE = new Set([
   "bulkCanonDate",
   "bulkCanonSession",
+  "examDateLong",
+  "examSessionLong",
+  "examWeekday",
+  "examDateHeading",
+  "examDateSortKey",
+  "examGroupsByDateSession",
   "hallByIdOrName",
   "examHallTypePool",
   "bulkBuildLookups",
@@ -127,6 +162,7 @@ const BULK_ENGINE = new Set([
   "bulkHallOccupancy",
   "bulkRoomsEligible",
   "bulkHallSelectionData",
+  "bulkColumnCapacityEstimate",
   "bulkGenerateOne",
   "runBulkSeatingCoSeated",
   "bulkYield",
@@ -156,6 +192,41 @@ const ROUTER_ENGINE = new Set([
 const DELETE_ENGINE = new Set([
   "planDeleteUpdatePaths",
   "buildBulkDeleteUpdate",
+]);
+
+// The register-number migration path. A register number is denormalised into the
+// student record, every exam's registerNumbers[] candidate list and every saved
+// seat slot, so a correction must migrate all three atomically. These helpers are
+// pure (plain objects only — no Firebase/DOM/React), so the exact update map and
+// the preserved seat geometry are asserted outside a browser.
+const REGNO_ENGINE = new Set([
+  "normRegno",
+  "studentRegnoClean",
+  "regnoError",
+  "migratePlanSeatRefs",
+  "regnoChangeConflict",
+  "regnoMigrationUpdates",
+  "examStaleRegisterNumbers",
+  "staleRegisterNumberReport",
+  "examCandidateCorrection",
+  "studentRegnoIndex",
+  "examEligibilityMatch",
+  "examCandidateAudit",
+  "studentExamDetachImpact",
+  "planHasRegno",
+  "studentReferenceImpact",
+]);
+
+// The seating-plan ownership gate. A plan carries no college_id, so ownership is
+// derived from its exam; this pure decision is the single source of truth for
+// whether a plan write is allowed. It touches nothing (no Firebase, DOM or
+// React), so every outcome — allowed, developer-exempt, and each refusal code —
+// is asserted as a plain function. The async wrapper (assertSeatingPlanOwnership)
+// is deliberately NOT pulled in: it reads `DB`/`AUTH`/`Store` and is covered at
+// the source level instead.
+const OWNERSHIP_ENGINE = new Set([
+  "seatingPlanOwnershipDecision",
+  "restoreSeatingPlans",
 ]);
 
 function load() {
@@ -190,7 +261,9 @@ function load() {
   const deleteEngine = all.filter((n) => DELETE_ENGINE.has(n) && !isJsx(n));
   const noticeEngine = all.filter((n) => NOTICE_ENGINE.has(n) && !isJsx(n));
   const routerEngine = all.filter((n) => ROUTER_ENGINE.has(n) && !isJsx(n));
-  const names = [...new Set([...shared, ...catFns, ...engine, ...loadEngine, ...bulkEngine, ...deleteEngine, ...noticeEngine, ...routerEngine])];
+  const ownershipEngine = all.filter((n) => OWNERSHIP_ENGINE.has(n) && !isJsx(n));
+  const regnoEngine = all.filter((n) => REGNO_ENGINE.has(n) && !isJsx(n));
+  const names = [...new Set([...shared, ...catFns, ...engine, ...loadEngine, ...bulkEngine, ...deleteEngine, ...noticeEngine, ...routerEngine, ...ownershipEngine, ...regnoEngine])];
   const needed = names.filter((n) => !fns[n]);
   if (needed.length) throw new Error("could not extract: " + needed.join(", "));
 

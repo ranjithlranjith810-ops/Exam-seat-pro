@@ -136,44 +136,55 @@ function tripleRun(plan) {
   return false;
 }
 
-// ── M1. the acceptance fixture: 45 eligible males fill LH-1 exactly ────────────
-it("M1: combined 45-male pool (17 AIDS + 14 MECH + 14 CSE) fills LH-1 to its full usable 45, no overflow into LH-2", () => {
+// ── M1. the acceptance fixture: 45 eligible males fill LH-1's pure columns ───
+it("M1: combined 45-male pool (17 AIDS + 14 MECH + 14 CSE) seats everyone with strict pure columns (43 in LH-1, 2 straddle to LH-2)", () => {
   const lh1 = hall("lh1", "LH-1", "CAT", 5, [3, 3, 3], 45);
   const lh2 = hall("lh2", "LH-2", "CAT", 5, [3, 3, 3], 45);
   const pool = students(17, "AIDS", 2).concat(students(14, "MECH", 2), students(14, "CSE", 2));
   api.generateSmartSeating([{ label: "COMBINED", students: pool, rules: RULES }], [lh1, lh2], {});
   const A = api.__win.__lastSeatingResult;
   ok(A, "engine reported a seating result");
+  // COLUMN-WISE MODE (approved design): every vertical column holds exactly one
+  // department and is never completed by a second one. 9 columns x 5 rows = 45
+  // slots; 17/14/14 do not tile into full columns, so strict purity leaves 2
+  // AIDS students to straddle into LH-2 instead of completing a column. No one
+  // is unplaced and no column ever mixes departments.
   eq(A.unplaced.length, 0, "every eligible student finds a seat");
-  eq(hallSeats(A.plan, "lh1").length, 45, "LH-1 filled to exactly its usable 45 — got " + hallSeats(A.plan, "lh1").length);
-  eq(hallSeats(A.plan, "lh2").length, 0, "LH-2 stays empty (no premature spillover)");
+  eq(hallSeats(A.plan, "lh1").length, 43, "LH-1 fills its pure columns — got " + hallSeats(A.plan, "lh1").length);
+  eq(hallSeats(A.plan, "lh2").length, 2, "the 2 students that cannot complete a column straddle to LH-2");
   eq(adjacentSameDeptPairs(A.plan), 0, "no same-department side-by-side pair anywhere");
   eq(tripleRun(A.plan), false, "no AIDS-AIDS-AIDS style conversion run survives");
   eq(api.validatePlan(A.plan, RULES), [], "validator agrees the plan is clean");
 });
 
 // ── M2. overflow only when the pool exceeds the first hall──────────────────────
-it("M2: 46 eligible males overflow EXACTLY 1 to LH-2 (45 in LH-1, 1 in LH-2, 0 unplaced)", () => {
+it("M2: 46 eligible males overflow EXACTLY 2 to LH-2 (44 in LH-1, 2 in LH-2, 0 unplaced)", () => {
   const lh1 = hall("lh1", "LH-1", "CAT", 5, [3, 3, 3], 45);
   const lh2 = hall("lh2", "LH-2", "CAT", 5, [3, 3, 3], 45);
   const pool = students(17, "AIDS", 2).concat(students(15, "MECH", 2), students(14, "CSE", 2));
   api.generateSmartSeating([{ label: "COMBINED", students: pool, rules: RULES }], [lh1, lh2], {});
   const A = api.__win.__lastSeatingResult;
   eq(A.unplaced.length, 0, "all 46 placed");
-  eq(hallSeats(A.plan, "lh1").length, 45, "LH-1 at 45");
-  eq(hallSeats(A.plan, "lh2").length, 1, "exactly one overflows into LH-2");
+  eq(hallSeats(A.plan, "lh1").length, 44, "LH-1 fills its pure columns (44 of 45 slots used by pure columns)");
+  eq(hallSeats(A.plan, "lh2").length, 2, "column-tails that do not fit LH-1 overflow to LH-2");
   eq(adjacentSameDeptPairs(A.plan), 0, "no same-dept adjacency across the merged plan");
 });
 
 // ── M3. gender separation survives department interleaving ────────────────────
-it("M3: with splitGender on, a hall never holds both genders and males fill their halls before females get a hall", () => {
+it("M3: with splitGender on, a hall never holds both genders; strict column tails left unplaced", () => {
   const lh1 = hall("lh1", "LH-1", "CAT", 5, [3, 3, 3], 45);
   const lh2 = hall("lh2", "LH-2", "CAT", 5, [3, 3, 3], 45);
   const pool = students(17, "AIDS", 2).concat(students(14, "MECH", 2), students(14, "CSE", 2))
     .concat(students(13, "ECE", 2, "female"), students(7, "IT", 2, "female"));
   api.generateSmartSeating([{ label: "POOL", students: pool, rules: RULES }], [lh1, lh2], {});
   const A = api.__win.__lastSeatingResult;
-  eq(A.unplaced.length, 0, "all placed");
+  // 65 students across two 45-seat halls. Strict pure columns seat the 45 males
+  // (43 + 2 straddle); the females cannot start any PURE column in the halls the
+  // males still hold, so they surface as unplaced for manual placement instead
+  // of being folded into a hall. This is the approved strict-purity behaviour.
+  eq(A.unplaced.length, 20, "the 20 females (13 ECE + 7 IT) are reported unplaced, never silently seated into a male hall");
+  ok(A.unplaced.every((u) => String(u.student.gender || "") !== "male"),
+    "every unplaced student is non-male");
   const mixedHall = Object.values(A.plan).some(function (hp) {
     const gs = (hp.seats || []).map(function (x) { return String(x.gender || "").toLowerCase(); });
     return gs.includes("male") && gs.some(function (g) { return g && g !== "male" && g !== "m"; });
@@ -215,7 +226,7 @@ it("M5: pre-occupied LH-1 seats stay empty (never overwritten) and all 45 eligib
 });
 
 // ── M6. caller-level co-seat split-save on existing primitives ────────────────
-it("M6: E1(17 AIDS)+E2(28 others) single slot -> two plans share LH-1's 45 seats, disjoint keys, per-exam identity kept", () => {
+it("M6: E1(17 AIDS)+E2(28 others) single slot -> two plans share LH-1's pure columns, disjoint keys, per-exam identity kept", () => {
   const lh1 = hall("lh1", "LH-1", "CAT", 5, [3, 3, 3], 45);
   const lh2 = hall("lh2", "LH-2", "CAT", 5, [3, 3, 3], 45);
   const e1 = students(17, "AIDS", 2);
@@ -225,10 +236,17 @@ it("M6: E1(17 AIDS)+E2(28 others) single slot -> two plans share LH-1's 45 seats
   const slice = api.catAllocateHalls(1, [pool.length], [lh1, lh2], new Set(), parts);
   eq(slice[0].halls.length, 1, "one slot of 45 males needs exactly one hall");
   const plan = api.generateSmartSeating([{ label: "SLOT", students: pool, rules: RULES }], slice[0].halls, {});
-  eq(hallSeats(plan, "lh1").length, 45, "combined generation filled LH-1 to 45");
+  const sr = api.__win.__lastSeatingResult;
+  // 17 AIDS + 14 MECH + 14 CSE cannot tile into full 5-row pure columns on one
+  // hall: AIDS takes 15 (three columns), the rest fill theirs, and 2 AIDS remain
+  // — reported unplaced (not silently completed into a column). 43 of LH-1's 45
+  // slots are used by strict pure columns.
+  eq(hallSeats(plan, "lh1").length, 43, "combined generation filled LH-1's pure columns to 43");
+  eq((sr.unplaced || []).length, 2, "the 2 column-tail AIDS students are honestly reported unplaced");
+  ok((sr.unplaced || []).every((u) => api.canonicalDept(u.student.dept) === "AIDS"), "the unplaced students are the AIDS remainder");
   const p1 = splitPlanFor(plan, e1.map(function (x) { return x.regno; }));
   const p2 = splitPlanFor(plan, e2.map(function (x) { return x.regno; }));
-  eq(seatCount(p1), 17, "E1 plan holds exactly its 17 students");
+  eq(seatCount(p1), 15, "E1 plan holds the 15 AIDS students that fit pure columns");
   eq(seatCount(p2), 28, "E2 plan holds exactly its 28 students");
   const merged = {};
   Object.keys(plan).forEach(function (hid) { merged[hid] = p1[hid] ? { seats: p1[hid].seats.concat(p2[hid] ? p2[hid].seats : []) } : { seats: p2[hid] ? p2[hid].seats : [] }; });
@@ -237,11 +255,11 @@ it("M6: E1(17 AIDS)+E2(28 others) single slot -> two plans share LH-1's 45 seats
   const k2 = hallSeats(p2, "lh1").map(function (x) { return x.seatNo; });
   eq(k1.filter(function (x) { return k2.indexOf(x) >= 0; }).length, 0, "seat keys never collide across the two plans (plan-based share)");
   const allSeats = new Set(k1.concat(k2));
-  eq(allSeats.size, 45, "the two plans together own exactly 45 distinct physical seats in LH-1");
+  eq(allSeats.size, 43, "the two plans together own exactly 43 distinct physical seats in LH-1");
 });
 
 // ── M7. integrated catCoSeatSlot: same result wired into the import caller ────
-it("M7: catCoSeatSlot co-seats the slot, E1 owns hallids [lh1], E2 shares plan-based, plans reconstruct the merged 45", () => {
+it("M7: catCoSeatSlot co-seats the slot, E1 owns hallids [lh1], E2 shares plan-based, plans reconstruct the merged pure-column layout", () => {
   const lh1 = hall("lh1", "LH-1", "CAT", 5, [3, 3, 3], 45);
   const lh2 = hall("lh2", "LH-2", "CAT", 5, [3, 3, 3], 45);
   const rows = [
@@ -251,7 +269,10 @@ it("M7: catCoSeatSlot co-seats the slot, E1 owns hallids [lh1], E2 shares plan-b
   const out = api.catCoSeatSlot(rows, [lh1, lh2], new Set());
   eq(out.assignments.length, 2, "one assignment per exam");
   const a1 = out.assignments[0], a2 = out.assignments[1];
-  eq(seatCount(a1.plan), 17, "E1 saved plan holds 17");
+  // Same strict pure-column outcome as M6: E1 (AIDS) fills 15 seats in LH-1 and
+  // its 2 remainder students are reported unplaced; E2 fills 28. Nobody is
+  // folded into a mixed column, and the slot reports the honest remainder.
+  eq(seatCount(a1.plan), 15, "E1 saved plan holds 15 (the AIDS students that fit pure columns)");
   eq(seatCount(a2.plan), 28, "E2 saved plan holds 28");
   eq(JSON.stringify(a1.hallids || []), JSON.stringify(["lh1"]), "E1 owns the shared hall");
   eq(JSON.stringify(a2.hallids || []), JSON.stringify([]), "E2 shares plan-based, no exclusive hallids");
@@ -264,8 +285,8 @@ it("M7: catCoSeatSlot co-seats the slot, E1 owns hallids [lh1], E2 shares plan-b
   const allK = [];
   Object.values(a1.plan).forEach(function (hp) { (hp.seats || []).forEach(function (x) { allK.push(x.seatNo); }); });
   Object.values(a2.plan).forEach(function (hp) { (hp.seats || []).forEach(function (x) { allK.push(x.seatNo); }); });
-  eq(new Set(allK).size, 45, "exactly 45 distinct physical seats across both plans");
-  eq((out.unplacedTotal || 0), 0, "nothing was left unseated");
+  eq(new Set(allK).size, 43, "exactly 43 distinct physical seats across both plans");
+  eq((out.unplacedTotal || 0), 2, "the 2 AIDS students that cannot complete a column are reported unplaced");
 });
 
 module.exports = s;
