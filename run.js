@@ -39,6 +39,7 @@ const suites = [
   require("./global_notice_pagination.test.js"),
   require("./seating_grid_consistency.test.js"),
   require("./nav_routing.test.js"),
+  require("./github_pages_routing.test.js"),
   require("./hall_selection.test.js"),
   require("./exam_sessions.test.js"),
   require("./seating_plan_ownership.test.js"),
