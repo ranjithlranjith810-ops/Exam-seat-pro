@@ -207,9 +207,9 @@ it("P9: a two-row drawing hall at the bottom of a page is deferred WHOLE, not le
 
   // The two drawing-hall rows (20 + 29 = 49) and a tiny ECE hall (2) after it.
   const mSeats = [];
-  for (let r = 0; r < 20; r++) mSeats.push(seat(r + 1, "953025104" + String(r + 1).padStart(3, "0")));
+  for (let r = 0; r < 20; r++) mSeats.push(seat(r + 1, "911111104" + String(r + 1).padStart(3, "0")));
   const mSeats2 = [];
-  for (let r = 0; r < 29; r++) mSeats2.push(seat(r + 21, "953025105" + String(r + 1).padStart(3, "0")));
+  for (let r = 0; r < 29; r++) mSeats2.push(seat(r + 21, "911111105" + String(r + 1).padStart(3, "0")));
   const eSeats = [seat(49, "953025243049"), seat(50, "953025243051")];
   const hm = { id: "hm", name: "MECH DRAWING HALL", hallType: "University", numbenches: 60,
     studentsperbench: 1, capacity: 60, layoutConfig: { columns: [{ seats: 1 }] } };
@@ -224,7 +224,7 @@ it("P9: a two-row drawing hall at the bottom of a page is deferred WHOLE, not le
   plans.ee[he.id] = hallPlan("ECE DRAWING HALL", eSeats);
   halls.push(hm, he);
   es.push(em, em2, ee);
-  const roster = ["953025104", "953025105"].reduce(function (a, p, k) {
+  const roster = ["911111104", "911111105"].reduce(function (a, p, k) {
     const n = k === 0 ? 20 : 29;
     for (let i = 0; i < n; i++) a.push({ regno: p + String(i + 1).padStart(3, "0"), gender: i % 2 ? "female" : "male", dept: "MECH", semester: 4, year: 2, section: "A" });
     return a;

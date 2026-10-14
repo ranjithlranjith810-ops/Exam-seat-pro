@@ -15,10 +15,11 @@ const s = h.suite("exam_candidate_fix.test.js — a stale exam candidate is corr
 const { it, eq, ok } = s;
 
 const EXAM = "MV6F3124A69519B9";
-const R_GHOST = "953025105006";   // in the exam's candidate list, no student record
-const R_REAL = "953025105009";    // the real student (currently absent from the list)
-const R_OTHER = "953025105010";   // a different, real student already listed
-const R_FOREIGN = "953024106022"; // a real student but in ANOTHER college
+// Synthetic, non-identifying register numbers (12 digits, valid per regnoError).
+const R_GHOST = "900000000001";   // in the exam's candidate list, no student record
+const R_REAL = "900000000002";    // the student being corrected (absent from the list)
+const R_OTHER = "900000000003";   // a different student already listed
+const R_FOREIGN = "900000000004"; // a student in ANOTHER college
 
 function stu(id, regno, name, college, dept) {
   return { id: id, regno: regno, name: name, dept: dept || "EEE", year: 2, semester: 3, gender: "male", college_id: college || "c1" };
@@ -29,9 +30,9 @@ function exam(registerNumbers, college) {
 
 function students() {
   return [
-    stu("st-real", R_REAL, "MASANA KUMAR M", "c1", "EEE"),
-    stu("st-other", R_OTHER, "PON RAHUL P", "c1", "EEE"),
-    stu("st-foreign", R_FOREIGN, "MUTHUSELVI V", "c2", "ECE"),
+    stu("st-real", R_REAL, "TEST_STUDENT_ALPHA", "c1", "EEE"),
+    stu("st-other", R_OTHER, "TEST_STUDENT_BETA", "c1", "EEE"),
+    stu("st-foreign", R_FOREIGN, "TEST_STUDENT_GAMMA", "c2", "ECE"),
   ];
 }
 
@@ -49,12 +50,12 @@ function applyAtomic(root, updates, fail) {
 
 // ── T1. the ghost is replaced by the real student's regno; the count is intact ──
 it("T1: replaces the ghost, keeps the candidate count, and names the student", () => {
-  const e = exam([R_REAL.replace(R_REAL, R_GHOST), R_OTHER, "953025105001"]);
+  const e = exam([R_REAL.replace(R_REAL, R_GHOST), R_OTHER, "900000000005"]);
   const res = api.examCandidateCorrection(e, R_GHOST, R_REAL, students());
   ok(res.ok, "correction succeeds: " + res.error);
-  eq(res.updates["exams/" + EXAM + "/registerNumbers"], [R_REAL, R_OTHER, "953025105001"], "ghost replaced in place, order preserved");
+  eq(res.updates["exams/" + EXAM + "/registerNumbers"], [R_REAL, R_OTHER, "900000000005"], "ghost replaced in place, order preserved");
   eq(res.updates["exams/" + EXAM + "/studentCount"], 3, "studentCount tracks the corrected list");
-  eq(res.registerNumbers, [R_REAL, R_OTHER, "953025105001"], "the corrected list is returned for the UI");
+  eq(res.registerNumbers, [R_REAL, R_OTHER, "900000000005"], "the corrected list is returned for the UI");
   eq(res.replaced, 1, "exactly one candidate replaced");
   eq(res.student && res.student.id, "st-real", "the resolved student is returned");
 });
@@ -70,7 +71,7 @@ it("T1b: a replacement already present elsewhere drops the duplicate ghost entry
 
 // ── T2. an old regno that is not a candidate is refused, nothing written ────────
 it("T2: refusing an old regno that is not in the list produces no update", () => {
-  const e = exam([R_OTHER, "953025105001"]);
+  const e = exam([R_OTHER, "900000000005"]);
   const before = JSON.stringify(e);
   const res = api.examCandidateCorrection(e, R_GHOST, R_REAL, students());
   ok(!res.ok, "refused");
@@ -99,7 +100,7 @@ it("T3b: replacing a candidate with itself is refused", () => {
 // ── T4. a replacement with no student record is refused (never ghost-for-ghost) ─
 it("T4: a replacement that resolves to no student is refused", () => {
   const e = exam([R_GHOST, R_OTHER]);
-  const res = api.examCandidateCorrection(e, R_GHOST, "953025105099", students());
+  const res = api.examCandidateCorrection(e, R_GHOST, "900000000099", students());
   ok(!res.ok, "refused");
   ok(res.error.indexOf("No student record") >= 0, "reason names the missing record");
 });
